@@ -1,0 +1,9 @@
+@import "tailwindcss";
+@plugin "daisyui";
+@layer base {
+  :root {
+    /* This forces the background variable to white or any color you prefer */
+    --b1: 0% 0 0; /* HSL for white */
+    background-color: white;
+  }
+}

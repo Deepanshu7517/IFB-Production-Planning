@@ -1,0 +1,60 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "src/index.js",
+  "bin": "dist/index.cjs",
+  "scripts": {
+    "copy:frontend": "xcopy /E /I /Y ..\\frontend\\dist public",
+    "bundle": "npm run copy:frontend && esbuild src/index.js --bundle --platform=node --target=node18 --outfile=dist/index.cjs --format=cjs --external:bcryptjs --external:mongoose --external:socket.io --external:cloudinary --external:multer --external:xlsx --external:ftp-srv --external:basic-ftp",
+    "build:binary": "npx esbuild src/index.js --bundle --platform=node --target=node18 --outfile=dist/index.cjs --format=cjs && npx pkg dist/index.cjs --target node18-win-x64 --output ../frontend/src-tauri/binaries/server-x86_64-pc-windows-msvc.exe --no-bytecode --public && xcopy /E /I /Y public ..\\frontend\\src-tauri\\binaries\\public",
+    "dev": "nodemon src/index.js",
+    "start": "node src/index.js",
+    "seed:masters": "node src/seeds/master.seed.js"
+  },
+  "pkg": {
+    "assets": [
+      "dist/**/*",
+      "node_modules/mongoose/**/*",
+      "node_modules/socket.io/**/*",
+      "node_modules/bcryptjs/**/*",
+      "node_modules/cloudinary/**/*",
+      "node_modules/multer/**/*",
+      "node_modules/xlsx/**/*",
+      "node_modules/ftp-srv/**/*",
+      "node_modules/basic-ftp/**/*",
+      "node_modules/chokidar/**/*"
+    ],
+    "scripts": [
+      "dist/**/*.js"
+    ],
+    "targets": [
+      "node18-win-x64"
+    ]
+  },
+  "keywords": [],
+  "author": "",
+  "type": "module",
+  "license": "ISC",
+  "dependencies": {
+    "basic-ftp": "^5.2.1",
+    "bcryptjs": "^2.4.3",
+    "chokidar": "^5.0.0",
+    "cloudinary": "^2.5.1",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "dotenv": "^16.4.5",
+    "express": "^4.22.1",
+    "ftp-srv": "^4.6.3",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.8.1",
+    "multer": "^2.1.1",
+    "socket.io": "^4.8.1",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.12",
+    "nodemon": "^3.1.7",
+    "pkg": "^5.8.1"
+  }
+}
