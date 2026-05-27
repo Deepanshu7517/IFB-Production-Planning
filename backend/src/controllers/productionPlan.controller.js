@@ -1,5 +1,3 @@
-
-
 // import ProductionPlan from '../models/productionPlan.model.js';
 // import { Matrix } from '../models/master.model.js';
 // import { buildFreshEntries, recomputeBacklog, isoWeekDates } from '../models/productionPlan.model.js';
@@ -312,7 +310,7 @@
 //     if (actual === null || shortfall === 0) {
 //       recomputeBacklog(plan.dailyEntries, plan.capacity);
 //     } else if (redistribution && Array.isArray(redistribution)) {
-//       plan.dailyEntries[idx].backlog = shortfall; 
+//       plan.dailyEntries[idx].backlog = shortfall;
 
 //       for (const dist of redistribution) {
 //         const fIdx = plan.dailyEntries.findIndex(e => e.date === dist.date);
@@ -548,16 +546,16 @@
 //     // SAFE CUSTOM WEEK INFO - STRICT UTC
 //     const getCustomWeekInfo = (dateObjUTC) => {
 //       const d = new Date(dateObjUTC.valueOf());
-//       const dayNum = d.getUTCDay() || 7; 
-//       d.setUTCDate(d.getUTCDate() + 4 - dayNum); 
+//       const dayNum = d.getUTCDay() || 7;
+//       d.setUTCDate(d.getUTCDate() + 4 - dayNum);
 //       const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
 //       let weekNum = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
 
-//       weekNum = weekNum - 1; 
+//       weekNum = weekNum - 1;
 //       let weekYear = d.getUTCFullYear();
 
 //       if (weekNum === 0) {
-//         weekNum = 52; 
+//         weekNum = 52;
 //         weekYear -= 1;
 //       }
 
@@ -591,8 +589,8 @@
 //         } else if (serialMatch) {
 //           const excelEpoch = new Date(Date.UTC(1899, 11, 30));
 //           excelEpoch.setUTCDate(excelEpoch.getUTCDate() + parseInt(rawStr));
-//           y = excelEpoch.getUTCFullYear(); 
-//           m = excelEpoch.getUTCMonth(); 
+//           y = excelEpoch.getUTCFullYear();
+//           m = excelEpoch.getUTCMonth();
 //           d = excelEpoch.getUTCDate();
 //         } else {
 //           continue;
@@ -792,21 +790,30 @@
 //     cleanupTemp(tempInput);
 //   }
 // };import ProductionPlan from '../models/productionPlan.model.js';import ProductionPlan from '../models/productionPlan.model.js';
-import ProductionPlan from '../models/productionPlan.model.js';
-import { Matrix } from '../models/master.model.js';
-import { buildFreshEntries, recomputeBacklog, isoWeekDates } from '../models/productionPlan.model.js';
-import { DailyEntry } from './dailyEntry.controller.js';
-import { uploadToFtp, downloadFromFtp, TEMP_PATH, cleanupTemp } from '../lib/ftp.js';
-import fs from 'fs';
-import path from 'path';
-import * as xlsx from 'xlsx';
+import ProductionPlan from "../models/productionPlan.model.js";
+import { Matrix } from "../models/master.model.js";
+import {
+  buildFreshEntries,
+  recomputeBacklog,
+  isoWeekDates,
+} from "../models/productionPlan.model.js";
+import { DailyEntry } from "./dailyEntry.controller.js";
+import {
+  uploadToFtp,
+  downloadFromFtp,
+  TEMP_PATH,
+  cleanupTemp,
+} from "../lib/ftp.js";
+import fs from "fs";
+import path from "path";
+import * as xlsx from "xlsx";
 
 // =============================================================================
 // SHARED UTILS
 // =============================================================================
 
 function entrySummary(plan) {
-  const entered = plan.dailyEntries.filter(e => e.actual !== null);
+  const entered = plan.dailyEntries.filter((e) => e.actual !== null);
   const totalActual = entered.reduce((s, e) => s + (e.actual ?? 0), 0);
   const totalPlan = plan.dailyEntries.reduce((s, e) => s + e.planned, 0);
   return {
@@ -815,7 +822,7 @@ function entrySummary(plan) {
     weekCapacity: plan.capacity,
     adherence: totalPlan > 0 ? Math.round((totalActual / totalPlan) * 100) : 0,
     daysEntered: entered.length,
-    daysRemaining: plan.dailyEntries.filter(e => e.actual === null).length,
+    daysRemaining: plan.dailyEntries.filter((e) => e.actual === null).length,
     backlog: totalPlan - totalActual,
   };
 }
@@ -831,25 +838,25 @@ async function syncDailyEntriesToCollection(plan, entries, userId) {
     week: plan.week,
     year: plan.year,
     plant: {
-      plantId: plan.model?.assemblyLine?.plant?.plantId ?? '',
-      plantName: plan.model?.assemblyLine?.plant?.plantName ?? '',
+      plantId: plan.model?.assemblyLine?.plant?.plantId ?? "",
+      plantName: plan.model?.assemblyLine?.plant?.plantName ?? "",
     },
     assemblyLine: {
-      assemblyLineId: plan.model?.assemblyLine?.assemblyLineId ?? '',
-      assemblyLineName: plan.model?.assemblyLine?.assemblyLineName ?? '',
+      assemblyLineId: plan.model?.assemblyLine?.assemblyLineId ?? "",
+      assemblyLineName: plan.model?.assemblyLine?.assemblyLineName ?? "",
     },
     model: {
-      modelId: plan.model?.modelId ?? '',
-      modelName: plan.model?.modelName ?? '',
+      modelId: plan.model?.modelId ?? "",
+      modelName: plan.model?.modelName ?? "",
     },
     part: {
-      partNumber: plan.bom?.partNumber ?? '',
-      partName: plan.bom?.partName ?? '',
+      partNumber: plan.bom?.partNumber ?? "",
+      partName: plan.bom?.partName ?? "",
     },
     enteredBy: userId ?? null,
   };
 
-  const ops = entries.map(entry => ({
+  const ops = entries.map((entry) => ({
     updateOne: {
       filter: { planId, date: entry.date },
       update: {
@@ -861,8 +868,8 @@ async function syncDailyEntriesToCollection(plan, entries, userId) {
         },
         $setOnInsert: {
           actual: null,
-          notes: '',
-          shift: 'day',
+          notes: "",
+          shift: "day",
         },
       },
       upsert: true,
@@ -877,22 +884,32 @@ async function syncDailyEntriesToCollection(plan, entries, userId) {
 // =============================================================================
 export const createProductionPlan = async (req, res) => {
   try {
-    const { matrixId, week, year, workingDays, capacity, status, notes } = req.body;
+    const { matrixId, week, year, workingDays, capacity, status, notes } =
+      req.body;
 
     if (!matrixId || !week) {
-      return res.status(400).json({ success: false, message: 'matrixId and week are required' });
+      return res
+        .status(400)
+        .json({ success: false, message: "matrixId and week are required" });
     }
 
     const matrix = await Matrix.findById(matrixId).lean();
     if (!matrix) {
-      return res.status(404).json({ success: false, message: `Matrix not found: ${matrixId}` });
+      return res
+        .status(404)
+        .json({ success: false, message: `Matrix not found: ${matrixId}` });
     }
 
     const planYear = year || new Date().getFullYear();
-    const planCapacity = capacity != null ? capacity : (matrix.model?.assemblyLine?.capacity ?? 0);
+    const planCapacity =
+      capacity != null ? capacity : (matrix.model?.assemblyLine?.capacity ?? 0);
     const planDays = workingDays ?? 6;
 
-    const exists = await ProductionPlan.exists({ matrixRef: matrixId, week, year: planYear });
+    const exists = await ProductionPlan.exists({
+      matrixRef: matrixId,
+      week,
+      year: planYear,
+    });
     if (exists) {
       return res.status(400).json({
         success: false,
@@ -909,8 +926,8 @@ export const createProductionPlan = async (req, res) => {
       model: matrix.model,
       bom: matrix.bom,
       shift: matrix.shift,
-      status: status || 'PLANNED',
-      notes: notes || '',
+      status: status || "PLANNED",
+      notes: notes || "",
       createdBy: req.user?._id,
     });
 
@@ -920,7 +937,7 @@ export const createProductionPlan = async (req, res) => {
       message: `Production plan created with ${plan.dailyEntries.length} daily entries`,
     });
   } catch (err) {
-    console.error('createProductionPlan:', err);
+    console.error("createProductionPlan:", err);
     res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -931,20 +948,29 @@ export const createProductionPlan = async (req, res) => {
 export const getAllProductionPlans = async (req, res) => {
   try {
     const {
-      week, year, plantId, assemblyLineId, modelId, status,
-      page = 1, limit = 50, sortBy = 'createdAt', sortOrder = 'desc',
+      week,
+      year,
+      plantId,
+      assemblyLineId,
+      modelId,
+      status,
+      page = 1,
+      limit = 50,
+      sortBy = "createdAt",
+      sortOrder = "desc",
     } = req.query;
 
     const query = {};
     if (week) query.week = week;
     if (year) query.year = parseInt(year);
-    if (plantId) query['model.assemblyLine.plant.plantId'] = plantId;
-    if (assemblyLineId) query['model.assemblyLine.assemblyLineId'] = assemblyLineId;
-    if (modelId) query['model.modelId'] = modelId;
+    if (plantId) query["model.assemblyLine.plant.plantId"] = plantId;
+    if (assemblyLineId)
+      query["model.assemblyLine.assemblyLineId"] = assemblyLineId;
+    if (modelId) query["model.modelId"] = modelId;
     if (status) query.status = status;
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
-    const sort = { [sortBy]: sortOrder === 'asc' ? 1 : -1 };
+    const sort = { [sortBy]: sortOrder === "asc" ? 1 : -1 };
 
     const [plans, total] = await Promise.all([
       ProductionPlan.find(query).sort(sort).skip(skip).limit(parseInt(limit)),
@@ -962,7 +988,7 @@ export const getAllProductionPlans = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('getAllProductionPlans:', err);
+    console.error("getAllProductionPlans:", err);
     res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -973,7 +999,10 @@ export const getAllProductionPlans = async (req, res) => {
 export const getProductionPlanById = async (req, res) => {
   try {
     const plan = await ProductionPlan.findById(req.params.id);
-    if (!plan) return res.status(404).json({ success: false, message: 'Production plan not found' });
+    if (!plan)
+      return res
+        .status(404)
+        .json({ success: false, message: "Production plan not found" });
     res.status(200).json({ success: true, data: plan });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -986,14 +1015,20 @@ export const getProductionPlanById = async (req, res) => {
 export const updateProductionPlan = async (req, res) => {
   try {
     const plan = await ProductionPlan.findById(req.params.id);
-    if (!plan) return res.status(404).json({ success: false, message: 'Production plan not found' });
+    if (!plan)
+      return res
+        .status(404)
+        .json({ success: false, message: "Production plan not found" });
 
     const { matrixId, capacity, workingDays, status, notes } = req.body;
     let needsRegenerate = false;
 
     if (matrixId && matrixId !== plan.matrixRef?.toString()) {
       const matrix = await Matrix.findById(matrixId).lean();
-      if (!matrix) return res.status(404).json({ success: false, message: `Matrix not found: ${matrixId}` });
+      if (!matrix)
+        return res
+          .status(404)
+          .json({ success: false, message: `Matrix not found: ${matrixId}` });
       plan.matrixRef = matrixId;
       plan.model = matrix.model;
       plan.bom = matrix.bom;
@@ -1001,14 +1036,25 @@ export const updateProductionPlan = async (req, res) => {
       needsRegenerate = true;
     }
 
-    if (capacity != null && capacity !== plan.capacity) { plan.capacity = capacity; needsRegenerate = true; }
-    if (workingDays != null && workingDays !== plan.workingDays) { plan.workingDays = workingDays; needsRegenerate = true; }
+    if (capacity != null && capacity !== plan.capacity) {
+      plan.capacity = capacity;
+      needsRegenerate = true;
+    }
+    if (workingDays != null && workingDays !== plan.workingDays) {
+      plan.workingDays = workingDays;
+      needsRegenerate = true;
+    }
     if (status !== undefined) plan.status = status;
     if (notes !== undefined) plan.notes = notes;
     plan.updatedBy = req.user?._id;
 
     if (needsRegenerate) {
-      plan.dailyEntries = buildFreshEntries(plan.capacity, plan.workingDays, plan.week, plan.year);
+      plan.dailyEntries = buildFreshEntries(
+        plan.capacity,
+        plan.workingDays,
+        plan.week,
+        plan.year,
+      );
     }
 
     await plan.save();
@@ -1017,11 +1063,11 @@ export const updateProductionPlan = async (req, res) => {
       success: true,
       data: plan,
       message: needsRegenerate
-        ? 'Production plan updated — daily entries regenerated'
-        : 'Production plan updated',
+        ? "Production plan updated — daily entries regenerated"
+        : "Production plan updated",
     });
   } catch (err) {
-    console.error('updateProductionPlan:', err);
+    console.error("updateProductionPlan:", err);
     res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -1032,8 +1078,13 @@ export const updateProductionPlan = async (req, res) => {
 export const deleteProductionPlan = async (req, res) => {
   try {
     const plan = await ProductionPlan.findByIdAndDelete(req.params.id);
-    if (!plan) return res.status(404).json({ success: false, message: 'Production plan not found' });
-    res.status(200).json({ success: true, message: 'Production plan deleted successfully' });
+    if (!plan)
+      return res
+        .status(404)
+        .json({ success: false, message: "Production plan not found" });
+    res
+      .status(200)
+      .json({ success: true, message: "Production plan deleted successfully" });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -1045,7 +1096,10 @@ export const deleteProductionPlan = async (req, res) => {
 export const getDailyEntries = async (req, res) => {
   try {
     const plan = await ProductionPlan.findById(req.params.id);
-    if (!plan) return res.status(404).json({ success: false, message: 'Production plan not found' });
+    if (!plan)
+      return res
+        .status(404)
+        .json({ success: false, message: "Production plan not found" });
 
     res.status(200).json({
       success: true,
@@ -1064,7 +1118,10 @@ export const getDailyEntries = async (req, res) => {
             assemblyLineId: plan.model?.assemblyLine?.assemblyLineId,
             assemblyLineName: plan.model?.assemblyLine?.assemblyLineName,
           },
-          model: { modelId: plan.model?.modelId, modelName: plan.model?.modelName },
+          model: {
+            modelId: plan.model?.modelId,
+            modelName: plan.model?.modelName,
+          },
           bom: plan.bom,
         },
         entries: plan.dailyEntries, // Directly uses EXACT mapping from DB
@@ -1086,22 +1143,32 @@ export const updateDailyEntry = async (req, res) => {
     const { actual, notes, shift, redistribution } = req.body;
 
     if (actual !== null && (actual === undefined || actual < 0)) {
-      return res.status(400).json({ success: false, message: 'actual must be null or a non-negative number' });
+      return res.status(400).json({
+        success: false,
+        message: "actual must be null or a non-negative number",
+      });
     }
 
     const plan = await ProductionPlan.findById(id);
-    if (!plan) return res.status(404).json({ success: false, message: 'Production plan not found' });
+    if (!plan)
+      return res
+        .status(404)
+        .json({ success: false, message: "Production plan not found" });
 
-    const idx = plan.dailyEntries.findIndex(e => e.date === date);
+    const idx = plan.dailyEntries.findIndex((e) => e.date === date);
     if (idx === -1) {
-      return res.status(404).json({ success: false, message: `No daily entry mapped for date ${date}` });
+      return res.status(404).json({
+        success: false,
+        message: `No daily entry mapped for date ${date}`,
+      });
     }
 
     plan.dailyEntries[idx].actual = actual !== null ? parseInt(actual) : null;
     if (notes !== undefined) plan.dailyEntries[idx].notes = notes;
     if (shift) plan.dailyEntries[idx].shift = shift;
 
-    const shortfall = actual !== null ? plan.dailyEntries[idx].planned - parseInt(actual) : 0;
+    const shortfall =
+      actual !== null ? plan.dailyEntries[idx].planned - parseInt(actual) : 0;
 
     if (actual === null || shortfall === 0) {
       recomputeBacklog(plan.dailyEntries, plan.capacity);
@@ -1109,7 +1176,7 @@ export const updateDailyEntry = async (req, res) => {
       plan.dailyEntries[idx].backlog = shortfall;
 
       for (const dist of redistribution) {
-        const fIdx = plan.dailyEntries.findIndex(e => e.date === dist.date);
+        const fIdx = plan.dailyEntries.findIndex((e) => e.date === dist.date);
         if (fIdx !== -1) {
           plan.dailyEntries[fIdx].planned += dist.addedPlanned;
           if (plan.dailyEntries[fIdx].planned < 0) {
@@ -1121,14 +1188,18 @@ export const updateDailyEntry = async (req, res) => {
       recomputeBacklog(plan.dailyEntries, plan.capacity);
     }
 
-    const allDone = plan.dailyEntries.every(e => e.actual !== null);
-    if (allDone) plan.status = 'COMPLETED';
-    else if (plan.status === 'PLANNED' && plan.dailyEntries.some(e => e.actual !== null)) plan.status = 'IN_PROGRESS';
+    const allDone = plan.dailyEntries.every((e) => e.actual !== null);
+    if (allDone) plan.status = "COMPLETED";
+    else if (
+      plan.status === "PLANNED" &&
+      plan.dailyEntries.some((e) => e.actual !== null)
+    )
+      plan.status = "IN_PROGRESS";
 
     plan.updatedBy = req.user?._id;
     await plan.save();
 
-    const daysToUpdate = plan.dailyEntries.filter(e => e.date >= date);
+    const daysToUpdate = plan.dailyEntries.filter((e) => e.date >= date);
 
     for (const d of daysToUpdate) {
       await DailyEntry.findOneAndUpdate(
@@ -1141,28 +1212,29 @@ export const updateDailyEntry = async (req, res) => {
             year: plan.year,
             planned: d.planned,
             actual: d.actual,
-            notes: d.notes ?? '',
-            shift: d.shift ?? 'day',
+            notes: d.notes ?? "",
+            shift: d.shift ?? "day",
             plant: {
-              plantId: plan.model?.assemblyLine?.plant?.plantId ?? '',
-              plantName: plan.model?.assemblyLine?.plant?.plantName ?? '',
+              plantId: plan.model?.assemblyLine?.plant?.plantId ?? "",
+              plantName: plan.model?.assemblyLine?.plant?.plantName ?? "",
             },
             assemblyLine: {
-              assemblyLineId: plan.model?.assemblyLine?.assemblyLineId ?? '',
-              assemblyLineName: plan.model?.assemblyLine?.assemblyLineName ?? '',
+              assemblyLineId: plan.model?.assemblyLine?.assemblyLineId ?? "",
+              assemblyLineName:
+                plan.model?.assemblyLine?.assemblyLineName ?? "",
             },
             model: {
-              modelId: plan.model?.modelId ?? '',
-              modelName: plan.model?.modelName ?? '',
+              modelId: plan.model?.modelId ?? "",
+              modelName: plan.model?.modelName ?? "",
             },
             part: {
-              partNumber: plan.bom?.partNumber ?? '',
-              partName: plan.bom?.partName ?? '',
+              partNumber: plan.bom?.partNumber ?? "",
+              partName: plan.bom?.partName ?? "",
             },
             enteredBy: req.user?._id ?? null,
           },
         },
-        { upsert: true, new: true }
+        { upsert: true, new: true },
       );
     }
 
@@ -1174,10 +1246,10 @@ export const updateDailyEntry = async (req, res) => {
         summary: entrySummary(plan),
         status: plan.status,
       },
-      message: 'Daily entry updated',
+      message: "Daily entry updated",
     });
   } catch (err) {
-    console.error('upsertDailyEntry error:', err);
+    console.error("upsertDailyEntry error:", err);
     res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -1188,7 +1260,10 @@ export const updateDailyEntry = async (req, res) => {
 export const getWeeklySummary = async (req, res) => {
   try {
     const { week, year } = req.query;
-    if (!week) return res.status(400).json({ success: false, message: 'week is required' });
+    if (!week)
+      return res
+        .status(400)
+        .json({ success: false, message: "week is required" });
 
     const y = year ? parseInt(year) : new Date().getFullYear();
     const summary = await ProductionPlan.getWeeklySummary(week, y);
@@ -1196,8 +1271,13 @@ export const getWeeklySummary = async (req, res) => {
     res.status(200).json({
       success: true,
       data: summary[0] ?? {
-        _id: week, totalPlans: 0, totalCapacity: 0, totalValue: 0,
-        plants: [], assemblyLines: [], models: [],
+        _id: week,
+        totalPlans: 0,
+        totalCapacity: 0,
+        totalValue: 0,
+        plants: [],
+        assemblyLines: [],
+        models: [],
       },
     });
   } catch (err) {
@@ -1207,12 +1287,14 @@ export const getWeeklySummary = async (req, res) => {
 
 export const getAnnualOverview = async (req, res) => {
   try {
-    const y = req.query.year ? parseInt(req.query.year) : new Date().getFullYear();
+    const y = req.query.year
+      ? parseInt(req.query.year)
+      : new Date().getFullYear();
     const overview = await ProductionPlan.getAnnualOverview(y);
 
     const weeklyData = Array.from({ length: 52 }, (_, i) => {
       const label = `W${i + 1}`;
-      const weekData = overview.find(d => d._id === label);
+      const weekData = overview.find((d) => d._id === label);
       return {
         week: label,
         totalPlans: weekData?.totalPlans || 0,
@@ -1232,7 +1314,10 @@ export const getAnnualOverview = async (req, res) => {
 export const getPlantSummary = async (req, res) => {
   try {
     const { plantId, year } = req.query;
-    if (!plantId) return res.status(400).json({ success: false, message: 'plantId is required' });
+    if (!plantId)
+      return res
+        .status(400)
+        .json({ success: false, message: "plantId is required" });
 
     const y = year ? parseInt(year) : new Date().getFullYear();
     const summary = await ProductionPlan.getPlantSummary(plantId, y);
@@ -1246,16 +1331,22 @@ export const getProductionPlansByRange = async (req, res) => {
   try {
     const { startWeek, endWeek, year, plantId } = req.query;
     if (!startWeek || !endWeek) {
-      return res.status(400).json({ success: false, message: 'startWeek and endWeek are required' });
+      return res.status(400).json({
+        success: false,
+        message: "startWeek and endWeek are required",
+      });
     }
 
     const y = year ? parseInt(year) : new Date().getFullYear();
     const start = parseInt(startWeek.substring(1));
     const end = parseInt(endWeek.substring(1));
-    const weeks = Array.from({ length: end - start + 1 }, (_, i) => `W${start + i}`);
+    const weeks = Array.from(
+      { length: end - start + 1 },
+      (_, i) => `W${start + i}`,
+    );
 
     const query = { week: { $in: weeks }, year: y };
-    if (plantId) query['model.assemblyLine.plant.plantId'] = plantId;
+    if (plantId) query["model.assemblyLine.plant.plantId"] = plantId;
 
     const plans = await ProductionPlan.find(query).sort({ week: 1 });
     res.status(200).json({ success: true, data: plans, count: plans.length });
@@ -1268,17 +1359,22 @@ export const bulkCreateProductionPlans = async (req, res) => {
   try {
     const { plans } = req.body;
     if (!Array.isArray(plans) || plans.length === 0) {
-      return res.status(400).json({ success: false, message: 'Provide an array of plans' });
+      return res
+        .status(400)
+        .json({ success: false, message: "Provide an array of plans" });
     }
 
-    const matrixIds = [...new Set(plans.map(p => p.matrixId))];
+    const matrixIds = [...new Set(plans.map((p) => p.matrixId))];
     const matrices = await Matrix.find({ _id: { $in: matrixIds } }).lean();
-    const matrixMap = Object.fromEntries(matrices.map(m => [m._id.toString(), m]));
+    const matrixMap = Object.fromEntries(
+      matrices.map((m) => [m._id.toString(), m]),
+    );
 
-    const enriched = plans.map(p => {
+    const enriched = plans.map((p) => {
       const matrix = matrixMap[p.matrixId];
       if (!matrix) throw new Error(`Matrix not found: ${p.matrixId}`);
-      const planCapacity = p.capacity ?? matrix.model?.assemblyLine?.capacity ?? 0;
+      const planCapacity =
+        p.capacity ?? matrix.model?.assemblyLine?.capacity ?? 0;
       const planDays = p.workingDays || 6;
       const planYear = p.year || new Date().getFullYear();
       return {
@@ -1290,18 +1386,30 @@ export const bulkCreateProductionPlans = async (req, res) => {
         model: matrix.model,
         bom: matrix.bom,
         shift: matrix.shift,
-        status: p.status || 'PLANNED',
-        notes: p.notes || '',
-        dailyEntries: buildFreshEntries(planCapacity, planDays, p.week, planYear),
+        status: p.status || "PLANNED",
+        notes: p.notes || "",
+        dailyEntries: buildFreshEntries(
+          planCapacity,
+          planDays,
+          p.week,
+          planYear,
+        ),
         createdBy: req.user?._id,
       };
     });
 
-    const created = await ProductionPlan.insertMany(enriched, { ordered: false });
-    res.status(201).json({ success: true, data: created, count: created.length });
+    const created = await ProductionPlan.insertMany(enriched, {
+      ordered: false,
+    });
+    res
+      .status(201)
+      .json({ success: true, data: created, count: created.length });
   } catch (err) {
     if (err.code === 11000) {
-      return res.status(400).json({ success: false, message: 'Some plans already exist (duplicate key)' });
+      return res.status(400).json({
+        success: false,
+        message: "Some plans already exist (duplicate key)",
+      });
     }
     res.status(500).json({ success: false, message: err.message });
   }
@@ -1329,18 +1437,22 @@ export const bulkCreateProductionPlans = async (req, res) => {
 //   return { weekLabel: `W${weekNum}`, weekYear };
 // };
 const getCustomWeekInfo = (dateObjUTC) => {
-  const d = new Date(Date.UTC(
-    dateObjUTC.getUTCFullYear(),
-    dateObjUTC.getUTCMonth(),
-    dateObjUTC.getUTCDate()
-  ));
+  const d = new Date(
+    Date.UTC(
+      dateObjUTC.getUTCFullYear(),
+      dateObjUTC.getUTCMonth(),
+      dateObjUTC.getUTCDate(),
+    ),
+  );
 
   const dayNum = d.getUTCDay() || 7;
   d.setUTCDate(d.getUTCDate() + 4 - dayNum);
 
   const weekYear = d.getUTCFullYear();
   const yearStart = new Date(Date.UTC(weekYear, 0, 1));
-  const weekNum = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  const weekNum = Math.ceil(
+    ((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7,
+  );
 
   return {
     weekLabel: `W${weekNum}`,
@@ -1352,9 +1464,7 @@ const parseExcelSerialDate = (serial, date1904 = false) => {
   if (!Number.isFinite(serial)) return null;
 
   const wholeDays = Math.floor(serial);
-  const baseUtc = date1904
-    ? Date.UTC(1904, 0, 1)
-    : Date.UTC(1899, 11, 31);
+  const baseUtc = date1904 ? Date.UTC(1904, 0, 1) : Date.UTC(1899, 11, 31);
 
   // Excel 1900 date system includes the fake date 1900-02-29
   const adjustedDays = date1904
@@ -1375,13 +1485,14 @@ const parseExcelSerialDate = (serial, date1904 = false) => {
 const parseHeaderDateCell = (cell, date1904 = false) => {
   if (!cell) return null;
 
-  if (typeof cell.v === 'number' && Number.isFinite(cell.v)) {
+  if (typeof cell.v === "number" && Number.isFinite(cell.v)) {
     return parseExcelSerialDate(cell.v, date1904);
   }
 
-  const text = String(cell.w ?? cell.v ?? '').trim();
+  const text = String(cell.w ?? cell.v ?? "").trim();
   if (!text) return null;
 
+  // const dmyMatch = text.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
   const dmyMatch = text.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
   if (dmyMatch) {
     return {
@@ -1391,6 +1502,7 @@ const parseHeaderDateCell = (cell, date1904 = false) => {
     };
   }
 
+  // const ymdMatch = text.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/);
   const ymdMatch = text.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/);
   if (ymdMatch) {
     return {
@@ -1409,19 +1521,20 @@ const parseHeaderDateCell = (cell, date1904 = false) => {
 
 const toPlainDailyEntry = (entry) => {
   if (!entry) return entry;
-  return typeof entry.toObject === 'function' ? entry.toObject() : { ...entry };
+  return typeof entry.toObject === "function" ? entry.toObject() : { ...entry };
 };
-
 
 export const uploadMonthlyPlan = async (req, res) => {
   const tempInput = path.join(
     TEMP_PATH,
-    `monthly_${Date.now()}_${Math.random().toString(36).slice(2)}.xlsx`
+    `monthly_${Date.now()}_${Math.random().toString(36).slice(2)}.xlsx`,
   );
 
   try {
     if (!req.file) {
-      return res.status(400).json({ success: false, message: 'No file uploaded' });
+      return res
+        .status(400)
+        .json({ success: false, message: "No file uploaded" });
     }
 
     const parsedYear = req.body.year
@@ -1429,20 +1542,22 @@ export const uploadMonthlyPlan = async (req, res) => {
       : new Date().getFullYear();
 
     if (!Number.isInteger(parsedYear)) {
-      return res.status(400).json({ success: false, message: 'Invalid year value' });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid year value" });
     }
 
     let manpower = {};
     if (req.body.manpower) {
       try {
         manpower =
-          typeof req.body.manpower === 'string'
+          typeof req.body.manpower === "string"
             ? JSON.parse(req.body.manpower)
             : req.body.manpower;
       } catch {
         return res.status(400).json({
           success: false,
-          message: 'Invalid manpower JSON format',
+          message: "Invalid manpower JSON format",
         });
       }
     }
@@ -1454,7 +1569,7 @@ export const uploadMonthlyPlan = async (req, res) => {
     console.log(`[FTP] Monthly plan saved: ${ftpFileName}`);
 
     const workbook = xlsx.read(req.file.buffer, {
-      type: 'buffer',
+      type: "buffer",
       cellDates: false,
     });
 
@@ -1462,7 +1577,7 @@ export const uploadMonthlyPlan = async (req, res) => {
     if (!sheetName) {
       return res.status(400).json({
         success: false,
-        message: 'No worksheet found in the uploaded file.',
+        message: "No worksheet found in the uploaded file.",
       });
     }
 
@@ -1470,28 +1585,30 @@ export const uploadMonthlyPlan = async (req, res) => {
     if (!sheet) {
       return res.status(400).json({
         success: false,
-        message: 'Unable to read the first worksheet.',
+        message: "Unable to read the first worksheet.",
       });
     }
 
     const rawRows = xlsx.utils.sheet_to_json(sheet, {
       header: 1,
-      defval: '',
+      defval: "",
       raw: true,
     });
 
     if (rawRows.length < 2) {
       return res.status(400).json({
         success: false,
-        message: 'File is empty or missing data rows.',
+        message: "File is empty or missing data rows.",
       });
     }
 
-    const sheetRange = sheet['!ref'] ? xlsx.utils.decode_range(sheet['!ref']) : null;
+    const sheetRange = sheet["!ref"]
+      ? xlsx.utils.decode_range(sheet["!ref"])
+      : null;
     if (!sheetRange) {
       return res.status(400).json({
         success: false,
-        message: 'Sheet has no readable range.',
+        message: "Sheet has no readable range.",
       });
     }
 
@@ -1505,7 +1622,7 @@ export const uploadMonthlyPlan = async (req, res) => {
       if (!parsedDate) continue;
 
       const { y, m, d } = parsedDate;
-      const isoDateString = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const isoDateString = `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
       const utcDate = new Date(Date.UTC(y, m, d));
       const { weekLabel, weekYear } = getCustomWeekInfo(utcDate);
 
@@ -1520,7 +1637,8 @@ export const uploadMonthlyPlan = async (req, res) => {
     if (dateCols.length === 0) {
       return res.status(400).json({
         success: false,
-        message: 'No valid date columns found. Expected date values in the header row starting from Column D.',
+        message:
+          "No valid date columns found. Expected date values in the header row starting from Column D.",
       });
     }
 
@@ -1528,7 +1646,7 @@ export const uploadMonthlyPlan = async (req, res) => {
     const matrixMap = new Map();
 
     for (const mx of allMatrices) {
-      const partNo = String(mx.bom?.partNumber ?? '').trim();
+      const partNo = String(mx.bom?.partNumber ?? "").trim();
       if (!partNo) continue;
 
       if (!matrixMap.has(partNo)) {
@@ -1548,10 +1666,10 @@ export const uploadMonthlyPlan = async (req, res) => {
 
     for (let r = 1; r < rawRows.length; r += 1) {
       const row = rawRows[r];
-      if (!row || row.every(cell => cell === '' || cell == null)) continue;
+      if (!row || row.every((cell) => cell === "" || cell == null)) continue;
 
-      const partNumber = String(row[1] ?? '').trim();
-      const partName = String(row[2] ?? '').trim();
+      const partNumber = String(row[1] ?? "").trim();
+      const partName = String(row[2] ?? "").trim();
 
       if (!partNumber) continue;
 
@@ -1566,9 +1684,9 @@ export const uploadMonthlyPlan = async (req, res) => {
       for (const col of dateCols) {
         const rawQty = row[col.colIndex];
         const qty =
-          rawQty === '' || rawQty == null
+          rawQty === "" || rawQty == null
             ? 0
-            : (Number.parseFloat(String(rawQty).replace(/,/g, '')) || 0);
+            : Number.parseFloat(String(rawQty).replace(/,/g, "")) || 0;
 
         if (qty <= 0) continue;
 
@@ -1586,8 +1704,8 @@ export const uploadMonthlyPlan = async (req, res) => {
           date: col.dateStr,
           planned: qty,
           actual: null,
-          notes: '',
-          shift: 'day',
+          notes: "",
+          shift: "day",
         });
       }
 
@@ -1597,7 +1715,10 @@ export const uploadMonthlyPlan = async (req, res) => {
       for (const [weekKey, weekData] of weeklyData.entries()) {
         const { weekLabel, weekYear, entries } = weekData;
 
-        const totalUploadedCapacity = entries.reduce((sum, entry) => sum + entry.planned, 0);
+        const totalUploadedCapacity = entries.reduce(
+          (sum, entry) => sum + entry.planned,
+          0,
+        );
         const headerDaysInWeek = headerDaysPerWeek.get(weekKey) ?? 0;
         const isSplitWeek = headerDaysInWeek < 7;
 
@@ -1621,7 +1742,10 @@ export const uploadMonthlyPlan = async (req, res) => {
 
             if (plan) {
               const existingEntriesMap = new Map(
-                (plan.dailyEntries ?? []).map(entry => [entry.date, toPlainDailyEntry(entry)])
+                (plan.dailyEntries ?? []).map((entry) => [
+                  entry.date,
+                  toPlainDailyEntry(entry),
+                ]),
               );
 
               for (const newEntry of entries) {
@@ -1634,15 +1758,17 @@ export const uploadMonthlyPlan = async (req, res) => {
                 }
               }
 
-              const mergedEntries = Array.from(existingEntriesMap.values()).sort((a, b) =>
-                String(a.date).localeCompare(String(b.date))
-              );
+              const mergedEntries = Array.from(
+                existingEntriesMap.values(),
+              ).sort((a, b) => String(a.date).localeCompare(String(b.date)));
 
               const newCapacity = mergedEntries.reduce(
                 (sum, entry) => sum + (entry.planned || 0),
-                0
+                0,
               );
-              const activeDays = mergedEntries.filter(entry => entry.planned > 0).length;
+              const activeDays = mergedEntries.filter(
+                (entry) => entry.planned > 0,
+              ).length;
 
               plan.dailyEntries = mergedEntries;
               plan.capacity = newCapacity;
@@ -1656,11 +1782,17 @@ export const uploadMonthlyPlan = async (req, res) => {
               plan.updatedBy = req.user?._id;
 
               await plan.save();
-              await syncDailyEntriesToCollection(plan, plan.dailyEntries, req.user?._id);
+              await syncDailyEntriesToCollection(
+                plan,
+                plan.dailyEntries,
+                req.user?._id,
+              );
 
               updatedCount += 1;
             } else {
-              const activeDays = entries.filter(entry => entry.planned > 0).length;
+              const activeDays = entries.filter(
+                (entry) => entry.planned > 0,
+              ).length;
               const workingDays = Math.max(activeDays, 1);
 
               const newPlan = await ProductionPlan.create({
@@ -1673,13 +1805,20 @@ export const uploadMonthlyPlan = async (req, res) => {
                 model: matrix.model,
                 bom: matrix.bom,
                 shift: matrix.shift,
-                status: 'PLANNED',
-                notes: weekManpowerVal !== null ? `Manpower: ${weekManpowerVal}` : '',
+                status: "PLANNED",
+                notes:
+                  weekManpowerVal !== null
+                    ? `Manpower: ${weekManpowerVal}`
+                    : "",
                 dailyEntries: entries,
                 createdBy: req.user?._id,
               });
 
-              await syncDailyEntriesToCollection(newPlan, newPlan.dailyEntries, req.user?._id);
+              await syncDailyEntriesToCollection(
+                newPlan,
+                newPlan.dailyEntries,
+                req.user?._id,
+              );
               createdCount += 1;
             }
           } catch (error) {
@@ -1702,8 +1841,11 @@ export const uploadMonthlyPlan = async (req, res) => {
     }
 
     const allSplitWeeks = Array.from(
-      new Set(processed.flatMap(item => item.splitWeeks))
-    ).sort((a, b) => Number.parseInt(a.slice(1), 10) - Number.parseInt(b.slice(1), 10));
+      new Set(processed.flatMap((item) => item.splitWeeks)),
+    ).sort(
+      (a, b) =>
+        Number.parseInt(a.slice(1), 10) - Number.parseInt(b.slice(1), 10),
+    );
 
     return res.status(201).json({
       success: true,
@@ -1721,10 +1863,10 @@ export const uploadMonthlyPlan = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('uploadMonthlyPlan Error:', err);
+    console.error("uploadMonthlyPlan Error:", err);
     return res.status(500).json({
       success: false,
-      message: err.message || 'Failed to upload monthly plan',
+      message: err.message || "Failed to upload monthly plan",
     });
   } finally {
     cleanupTemp(tempInput);

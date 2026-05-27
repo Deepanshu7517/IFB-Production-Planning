@@ -512,10 +512,10 @@ const Masters: React.FC = () => {
     );
 
     try {
-      const res = await axios.patch(
-        `${API_URL}/matrix/${encodeURIComponent(partNumber)}/shift`,
-        { shift },
-      );
+      // const res = await axios.patch(
+      //   `${API_URL}/matrix/${encodeURIComponent(partNumber)}/shift`,
+      //   { shift },
+      // );
 
       // setItems((current) =>
       //   current.map((row) =>
@@ -705,7 +705,7 @@ const Masters: React.FC = () => {
         const isExpanded = expandedBomId === item._id;
         const childCount = item.childPartList?.length ?? 0;
         const hasModel = !!item.model?.modelId;
-        const hasPrice = item.price != null && item.price !== 0;
+        // const hasPrice = item.price != null && item.price !== 0;
         return (
           <>
             <td className="font-mono font-semibold text-sm">

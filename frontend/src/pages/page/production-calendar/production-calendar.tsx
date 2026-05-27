@@ -12,7 +12,7 @@ import {
   BarChart3,
   AlertTriangle,
   Package,
-  Search,
+  // Search,
   Filter,
   CheckCircle2,
   AlertCircle,
@@ -2249,7 +2249,9 @@ const ProductionDashboard: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState("");
   const [shiftFilter, setShiftFilter] = useState("");
   const [searchFilter, setSearchFilter] = useState("");
-
+  const [tableViewMode, setTableViewMode] = useState<"weekly" | "daily">(
+    "weekly",
+  );
   // ── Fetch ──────────────────────────────────────────────────────────────────
   const fetchPlans = useCallback(async () => {
     setLoading(true);
@@ -2288,13 +2290,13 @@ const ProductionDashboard: React.FC = () => {
   }, [fetchPlans]);
 
   // Auto-select first plan on week tab change
-  useEffect(() => {
-    const wp = plans.filter((p) => p.week === selectedWeek);
-    setSelectedPlanId((prev) => {
-      if (prev && wp.find((p) => p._id === prev)) return prev;
-      return wp.length > 0 ? wp[0]._id : "";
-    });
-  }, [selectedWeek, plans]);
+  // useEffect(() => {
+  //   const wp = plans.filter((p) => p.week === selectedWeek);
+  //   setSelectedPlanId((prev) => {
+  //     if (prev && wp.find((p) => p._id === prev)) return prev;
+  //     return wp.length > 0 ? wp[0]._id : "";
+  //   });
+  // }, [selectedWeek, plans]);
 
   // ── Save ───────────────────────────────────────────────────────────────────
   const handleSaveEntry = useCallback(
@@ -2572,7 +2574,36 @@ const ProductionDashboard: React.FC = () => {
       }),
     [filteredWeekPlans],
   );
+  const dailyTableRows = useMemo(
+    () =>
+      filteredWeekPlans
+        .flatMap((plan) =>
+          enrichEntries(plan).map((entry) => {
+            const entered = entry.actual !== null;
+            const actual = entry.actual ?? 0;
+            const balance = entered ? actual - entry.planned : 0;
+            const adherence =
+              entered && entry.planned > 0 ? (actual / entry.planned) * 100 : 0;
 
+            return {
+              plan,
+              entry,
+              planned: entry.planned,
+              actual,
+              balance,
+              adherence,
+              entered,
+              dayStatus: getDayStatus(entry),
+            };
+          }),
+        )
+        .sort(
+          (a, b) =>
+            a.entry.date.localeCompare(b.entry.date) ||
+            g.bom(a.plan).partNumber.localeCompare(g.bom(b.plan).partNumber),
+        ),
+    [filteredWeekPlans],
+  );
   const totalWeekBacklog = stats ? Math.max(stats.backlog, 0) : 0;
 
   // ==========================================================================
@@ -2581,9 +2612,10 @@ const ProductionDashboard: React.FC = () => {
   return (
     <div
       style={{
-        minHeight: "100vh",
+        minHeight: "100dvh",
         background: "#f0f4f8",
         fontFamily: "'DM Sans', 'Nunito', system-ui, sans-serif",
+        overflowX: "hidden",
       }}
     >
       {/* HEADER */}
@@ -2629,11 +2661,14 @@ const ProductionDashboard: React.FC = () => {
         <div
           style={{
             margin: "0 auto",
-            padding: "0 24px",
-            height: 60,
+            padding: "10px clamp(10px, 2.2vw, 24px)",
+            minHeight: 60,
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
+            flexWrap: "wrap",
+            rowGap: 8,
+            columnGap: 10,
           }}
         >
           <div>
@@ -2652,7 +2687,7 @@ const ProductionDashboard: React.FC = () => {
             </div>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <button
+            {/* <button
               onClick={() => setShowUploadModal(true)}
               style={{
                 background: "#059669",
@@ -2669,7 +2704,24 @@ const ProductionDashboard: React.FC = () => {
               }}
             >
               <FileSpreadsheet size={15} /> Add Production Planning
+            </button> */}
+            <button
+              onClick={() => setShowUploadModal(true)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-lg font-semibold text-sm hover:bg-emerald-700 transition shadow-sm"
+            >
+              <FileSpreadsheet size={17} /> Upload Monthly Excel
             </button>
+            {/* {showUploadModal && (
+              <MonthlyUploadModal
+                currentYear={cwi.year}
+                currentWeekNumber={cwi.weekNumber}
+                onClose={() => setShowUploadModal(false)}
+                onSuccess={() => {
+                  setShowUploadModal(false);
+                  fetchPlans();
+                }}
+              />
+            )} */}
             {showUploadModal && (
               <MonthlyUploadModal
                 currentYear={cwi.year}
@@ -2710,10 +2762,10 @@ const ProductionDashboard: React.FC = () => {
       <div
         style={{
           margin: "0 auto",
-          padding: "20px 24px",
+          padding: "clamp(10px, 2vw, 20px) clamp(10px, 2.2vw, 24px)",
           display: "flex",
           flexDirection: "column",
-          gap: 16,
+          gap: 14,
         }}
       >
         {/* ERROR */}
@@ -2814,7 +2866,7 @@ const ProductionDashboard: React.FC = () => {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: `repeat(${visibleWeeks.length || 5}, 1fr)`,
+              gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
               gap: 12,
             }}
           >
@@ -3185,7 +3237,7 @@ const ProductionDashboard: React.FC = () => {
                     background: "#fff",
                   }}
                 >
-                  {weekPlans.map((p) => (
+                  {filteredWeekPlans.map((p) => (
                     <option key={p._id} value={p._id}>
                       {g.plant(p).plantName} · {g.line(p).assemblyLineName} ·{" "}
                       {g.bom(p).partNumber}
@@ -3352,7 +3404,8 @@ const ProductionDashboard: React.FC = () => {
                 padding: 16,
                 display: "grid",
                 gap: 10,
-                gridTemplateColumns: `repeat(${Math.max(entries.length, 1)}, 1fr)`,
+                // gridTemplateColumns: `repeat(${Math.max(entries.length, 1)}, 1fr)`,
+                gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
               }}
             >
               {entries.map((e) => {
@@ -3572,7 +3625,8 @@ const ProductionDashboard: React.FC = () => {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(8, 1fr)",
+              // gridTemplateColumns: "repeat(8, 1fr)",
+              gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
               gap: 10,
             }}
           >
@@ -3705,129 +3759,139 @@ const ProductionDashboard: React.FC = () => {
             <div style={{ fontSize: 10, color: "#cbd5e1", marginBottom: 14 }}>
               Planned vs Actual · backlog/surplus labels above each day
             </div>
-
-            <div style={{ display: "flex", alignItems: "flex-end", gap: 6 }}>
-              {entries.map((e, i) => {
-                const st = getDayStatus(e);
-                const s = SS[st];
-                const CHART_H = 80;
-                const ph = Math.max((e.planned / sparkMax) * CHART_H, 3);
-                const ah =
-                  e.actual !== null
-                    ? Math.max((e.actual / sparkMax) * CHART_H, 3)
-                    : 0;
-                const blv = e.actual !== null ? e.planned - e.actual : null;
-                return (
-                  <div
-                    key={i}
-                    style={{
-                      flex: 1,
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      minWidth: 0,
-                    }}
-                  >
+            <div
+              style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "flex-end",
+                  gap: 6,
+                  minWidth: Math.max(entries.length * 56, 360),
+                }}
+              >
+                {entries.map((e, i) => {
+                  const st = getDayStatus(e);
+                  const s = SS[st];
+                  const CHART_H = 80;
+                  const ph = Math.max((e.planned / sparkMax) * CHART_H, 3);
+                  const ah =
+                    e.actual !== null
+                      ? Math.max((e.actual / sparkMax) * CHART_H, 3)
+                      : 0;
+                  const blv = e.actual !== null ? e.planned - e.actual : null;
+                  return (
                     <div
+                      key={i}
                       style={{
-                        height: 18,
+                        flex: 1,
                         display: "flex",
-                        alignItems: "flex-end",
-                        justifyContent: "center",
-                        width: "100%",
-                        marginBottom: 3,
-                      }}
-                    >
-                      {blv !== null && blv > 0 && (
-                        <span
-                          style={{
-                            fontSize: 8,
-                            fontWeight: 800,
-                            color: "#dc2626",
-                            background: "#fee2e2",
-                            borderRadius: 4,
-                            padding: "1px 4px",
-                            lineHeight: 1.5,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          -{blv}
-                        </span>
-                      )}
-                      {blv !== null && blv < 0 && (
-                        <span
-                          style={{
-                            fontSize: 8,
-                            fontWeight: 800,
-                            color: "#059669",
-                            background: "#dcfce7",
-                            borderRadius: 4,
-                            padding: "1px 4px",
-                            lineHeight: 1.5,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          +{Math.abs(blv)}
-                        </span>
-                      )}
-                    </div>
-                    <div
-                      style={{
-                        width: "100%",
-                        display: "flex",
-                        alignItems: "flex-end",
-                        gap: 2,
-                        height: CHART_H,
+                        flexDirection: "column",
+                        alignItems: "center",
+                        minWidth: 0,
                       }}
                     >
                       <div
-                        title={`Planned: ${e.planned}`}
                         style={{
-                          flex: 1,
-                          height: ph,
-                          background: "#f1f5f9",
-                          borderRadius: "3px 3px 0 0",
-                          border: "1px solid #e2e8f0",
-                          borderBottom: "none",
+                          height: 18,
+                          display: "flex",
+                          alignItems: "flex-end",
+                          justifyContent: "center",
+                          width: "100%",
+                          marginBottom: 3,
                         }}
-                      />
-                      {e.actual !== null ? (
+                      >
+                        {blv !== null && blv > 0 && (
+                          <span
+                            style={{
+                              fontSize: 8,
+                              fontWeight: 800,
+                              color: "#dc2626",
+                              background: "#fee2e2",
+                              borderRadius: 4,
+                              padding: "1px 4px",
+                              lineHeight: 1.5,
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            -{blv}
+                          </span>
+                        )}
+                        {blv !== null && blv < 0 && (
+                          <span
+                            style={{
+                              fontSize: 8,
+                              fontWeight: 800,
+                              color: "#059669",
+                              background: "#dcfce7",
+                              borderRadius: 4,
+                              padding: "1px 4px",
+                              lineHeight: 1.5,
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            +{Math.abs(blv)}
+                          </span>
+                        )}
+                      </div>
+                      <div
+                        style={{
+                          width: "100%",
+                          display: "flex",
+                          alignItems: "flex-end",
+                          gap: 2,
+                          height: CHART_H,
+                        }}
+                      >
                         <div
-                          title={`Actual: ${e.actual}`}
+                          title={`Planned: ${e.planned}`}
                           style={{
                             flex: 1,
-                            height: ah,
-                            background: s.bar,
+                            height: ph,
+                            background: "#f1f5f9",
                             borderRadius: "3px 3px 0 0",
-                            opacity: 0.9,
+                            border: "1px solid #e2e8f0",
+                            borderBottom: "none",
                           }}
                         />
-                      ) : (
-                        <div
-                          style={{
-                            flex: 1,
-                            height: 3,
-                            background: "#e2e8f0",
-                            borderRadius: "3px 3px 0 0",
-                          }}
-                        />
-                      )}
+                        {e.actual !== null ? (
+                          <div
+                            title={`Actual: ${e.actual}`}
+                            style={{
+                              flex: 1,
+                              height: ah,
+                              background: s.bar,
+                              borderRadius: "3px 3px 0 0",
+                              opacity: 0.9,
+                            }}
+                          />
+                        ) : (
+                          <div
+                            style={{
+                              flex: 1,
+                              height: 3,
+                              background: "#e2e8f0",
+                              borderRadius: "3px 3px 0 0",
+                            }}
+                          />
+                        )}
+                      </div>
+                      <span
+                        style={{
+                          fontSize: 9,
+                          fontWeight: 800,
+                          textTransform: "uppercase",
+                          color: e.isToday ? "#0f172a" : "#cbd5e1",
+                          letterSpacing: 0.5,
+                          marginTop: 4,
+                        }}
+                      >
+                        {e.dayLabel}
+                      </span>
                     </div>
-                    <span
-                      style={{
-                        fontSize: 9,
-                        fontWeight: 800,
-                        textTransform: "uppercase",
-                        color: e.isToday ? "#0f172a" : "#cbd5e1",
-                        letterSpacing: 0.5,
-                        marginTop: 4,
-                      }}
-                    >
-                      {e.dayLabel}
-                    </span>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
 
             <div
@@ -3909,7 +3973,7 @@ const ProductionDashboard: React.FC = () => {
         )}
 
         {/* ── SECTION 5: FILTERS ──────────────────────────────────────────── */}
-        <section
+        {/* <section
           style={{
             background: "#fff",
             borderRadius: 16,
@@ -4033,10 +4097,10 @@ const ProductionDashboard: React.FC = () => {
               </button>
             )}
           </div>
-        </section>
+        </section> */}
 
         {/* ── SECTION 6: TABLE ────────────────────────────────────────────── */}
-        <section
+        {/* <section
           style={{
             background: "#fff",
             borderRadius: 16,
@@ -4552,8 +4616,957 @@ const ProductionDashboard: React.FC = () => {
               )}
             </table>
           </div>
-        </section>
+        </section> */}
+        {/* ── SECTION 6: TABLE ────────────────────────────────────────────── */}
+        <section
+          style={{
+            background: "#fff",
+            borderRadius: 16,
+            border: "1px solid #e2e8f0",
+            overflow: "hidden",
+            boxShadow: "0 1px 4px rgba(0,0,0,0.05)",
+            marginBottom: 24,
+          }}
+        >
+          <div
+            style={{
+              padding: "12px 20px",
+              borderBottom: "1px solid #f1f5f9",
+              background: "#fafafa",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+            }}
+          >
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 800,
+                color: "#94a3b8",
+                textTransform: "uppercase",
+                letterSpacing: 2,
+              }}
+            >
+              {selectedWeek} —{" "}
+              {tableViewMode === "weekly"
+                ? "Weekly Production Summary"
+                : "Per Day Production Plan"}
+            </span>
 
+            <div
+              style={{
+                display: "inline-flex",
+                border: "1px solid #e2e8f0",
+                borderRadius: 9,
+                background: "#fff",
+                overflow: "hidden",
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setTableViewMode("weekly")}
+                style={{
+                  border: "none",
+                  padding: "6px 11px",
+                  fontSize: 11,
+                  fontWeight: 800,
+                  cursor: "pointer",
+                  background: tableViewMode === "weekly" ? "#1d4ed8" : "#fff",
+                  color: tableViewMode === "weekly" ? "#fff" : "#64748b",
+                }}
+              >
+                Weekly Plan
+              </button>
+              <button
+                type="button"
+                onClick={() => setTableViewMode("daily")}
+                style={{
+                  border: "none",
+                  borderLeft: "1px solid #e2e8f0",
+                  padding: "6px 11px",
+                  fontSize: 11,
+                  fontWeight: 800,
+                  cursor: "pointer",
+                  background: tableViewMode === "daily" ? "#1d4ed8" : "#fff",
+                  color: tableViewMode === "daily" ? "#fff" : "#64748b",
+                }}
+              >
+                Per Day Plan
+              </button>
+            </div>
+          </div>
+
+          <div style={{ overflowX: "auto" }}>
+            {tableViewMode === "weekly" ? (
+              <>
+                <table style={{ width: "100%", minWidth: 980, borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr
+                      style={{
+                        background: "#f8fafc",
+                        borderBottom: "1px solid #e8ecf0",
+                      }}
+                    >
+                      {[
+                        "Model",
+                        "Part",
+                        "Capacity",
+                        "Planned",
+                        "Actual",
+                        "Balance",
+                        "Adherence",
+                        "Backlog",
+                        "Child Parts",
+                        "Plant · Line",
+                        "Status",
+                        "",
+                      ].map((h) => (
+                        <th
+                          key={h}
+                          style={{
+                            padding: "10px 14px",
+                            textAlign: "left",
+                            fontSize: 9,
+                            fontWeight: 800,
+                            color: "#94a3b8",
+                            textTransform: "uppercase",
+                            letterSpacing: 1.5,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tableRows.length > 0 ? (
+                      tableRows.map(
+                        (
+                          {
+                            plan,
+                            planned,
+                            actual,
+                            balance,
+                            adherence,
+                            childShortage,
+                            entered,
+                          },
+                          idx,
+                        ) => {
+                          const bom = g.bom(plan);
+                          const mdl = g.model(plan);
+                          const plt = g.plant(plan);
+                          const line = g.line(plan);
+                          const kids = g.children(plan);
+                          const backlogUnits = Math.max(-balance, 0);
+
+                          return (
+                            <tr
+                              key={plan._id}
+                              onClick={() => {
+                                setSelectedPlanId(plan._id);
+                                setSelectedWeek(plan.week);
+                              }}
+                              style={{
+                                borderBottom: "1px solid #f1f5f9",
+                                cursor: "pointer",
+                                background:
+                                  plan._id === selectedPlanId
+                                    ? "#eff6ff"
+                                    : idx % 2 === 1
+                                      ? "#fafafa"
+                                      : "#fff",
+                                transition: "background .1s",
+                              }}
+                              onMouseEnter={(ev) => {
+                                if (plan._id !== selectedPlanId)
+                                  (
+                                    ev.currentTarget as HTMLTableRowElement
+                                  ).style.background = "#f8fafc";
+                              }}
+                              onMouseLeave={(ev) => {
+                                (
+                                  ev.currentTarget as HTMLTableRowElement
+                                ).style.background =
+                                  plan._id === selectedPlanId
+                                    ? "#eff6ff"
+                                    : idx % 2 === 1
+                                      ? "#fafafa"
+                                      : "#fff";
+                              }}
+                            >
+                              <td style={{ padding: "11px 14px" }}>
+                                <span
+                                  style={{
+                                    background: "#ede9fe",
+                                    color: "#7c3aed",
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    padding: "3px 8px",
+                                    borderRadius: 20,
+                                  }}
+                                >
+                                  {mdl.modelName}
+                                </span>
+                              </td>
+                              <td style={{ padding: "11px 14px" }}>
+                                <div
+                                  style={{
+                                    fontSize: 12,
+                                    fontWeight: 700,
+                                    color: "#0f172a",
+                                  }}
+                                >
+                                  {bom.partNumber}
+                                </div>
+                                <div
+                                  style={{
+                                    fontSize: 10,
+                                    color: "#94a3b8",
+                                    maxWidth: 140,
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  {bom.partName}
+                                </div>
+                              </td>
+                              <td
+                                style={{
+                                  padding: "11px 14px",
+                                  fontWeight: 700,
+                                  fontSize: 13,
+                                  color: "#475569",
+                                }}
+                              >
+                                {plan.capacity.toLocaleString()}
+                              </td>
+                              <td
+                                style={{
+                                  padding: "11px 14px",
+                                  fontWeight: 900,
+                                  fontSize: 14,
+                                  color: "#0f172a",
+                                }}
+                              >
+                                {planned.toLocaleString()}
+                              </td>
+                              <td
+                                style={{
+                                  padding: "11px 14px",
+                                  fontWeight: 900,
+                                  fontSize: 14,
+                                  color: entered > 0 ? "#0f172a" : "#e2e8f0",
+                                }}
+                              >
+                                {entered > 0 ? actual.toLocaleString() : "—"}
+                              </td>
+                              <td
+                                style={{
+                                  padding: "11px 14px",
+                                  fontWeight: 900,
+                                  fontSize: 14,
+                                  color:
+                                    entered > 0
+                                      ? balance >= 0
+                                        ? "#059669"
+                                        : "#dc2626"
+                                      : "#e2e8f0",
+                                }}
+                              >
+                                {entered > 0
+                                  ? balance >= 0
+                                    ? `+${balance}`
+                                    : balance
+                                  : "—"}
+                              </td>
+                              <td style={{ padding: "11px 14px" }}>
+                                {entered > 0 ? (
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: 7,
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        width: 52,
+                                        height: 5,
+                                        background: "#f1f5f9",
+                                        borderRadius: 3,
+                                        overflow: "hidden",
+                                      }}
+                                    >
+                                      <div
+                                        style={{
+                                          height: "100%",
+                                          borderRadius: 3,
+                                          background:
+                                            adherence >= 100
+                                              ? "#10b981"
+                                              : adherence >= 90
+                                                ? "#3b82f6"
+                                                : "#ef4444",
+                                          width: `${Math.min(adherence, 100)}%`,
+                                        }}
+                                      />
+                                    </div>
+                                    <span
+                                      style={{
+                                        fontSize: 11,
+                                        fontWeight: 700,
+                                        color: "#475569",
+                                      }}
+                                    >
+                                      {adherence.toFixed(0)}%
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span
+                                    style={{ color: "#e2e8f0", fontSize: 12 }}
+                                  >
+                                    —
+                                  </span>
+                                )}
+                              </td>
+                              <td style={{ padding: "11px 14px" }}>
+                                {backlogUnits > 0 ? (
+                                  <span
+                                    style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: 4,
+                                      fontSize: 11,
+                                      fontWeight: 700,
+                                      color: "#dc2626",
+                                      background: "#fff1f2",
+                                      padding: "3px 8px",
+                                      borderRadius: 20,
+                                    }}
+                                  >
+                                    <AlertCircle size={10} /> {backlogUnits}
+                                  </span>
+                                ) : entered > 0 ? (
+                                  <span
+                                    style={{
+                                      fontSize: 11,
+                                      fontWeight: 600,
+                                      color: "#94a3b8",
+                                    }}
+                                  >
+                                    —
+                                  </span>
+                                ) : (
+                                  <span style={{ color: "#e2e8f0" }}>—</span>
+                                )}
+                              </td>
+                              <td style={{ padding: "11px 14px" }}>
+                                {kids.length > 0 ? (
+                                  childShortage > 0 ? (
+                                    <span
+                                      style={{
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: 4,
+                                        fontSize: 11,
+                                        fontWeight: 700,
+                                        color: "#dc2626",
+                                        background: "#fff1f2",
+                                        padding: "3px 8px",
+                                        borderRadius: 20,
+                                      }}
+                                    >
+                                      <AlertCircle size={10} /> {kids.length} ·
+                                      shortage
+                                    </span>
+                                  ) : (
+                                    <span
+                                      style={{
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: 4,
+                                        fontSize: 11,
+                                        fontWeight: 700,
+                                        color: "#059669",
+                                        background: "#f0fdf4",
+                                        padding: "3px 8px",
+                                        borderRadius: 20,
+                                      }}
+                                    >
+                                      <CheckCircle2 size={10} /> {kids.length}{" "}
+                                      parts
+                                    </span>
+                                  )
+                                ) : (
+                                  <span
+                                    style={{ color: "#e2e8f0", fontSize: 12 }}
+                                  >
+                                    —
+                                  </span>
+                                )}
+                              </td>
+                              <td style={{ padding: "11px 14px" }}>
+                                <div
+                                  style={{
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    color: "#334155",
+                                  }}
+                                >
+                                  {plt.plantName}
+                                </div>
+                                <div
+                                  style={{
+                                    fontSize: 10,
+                                    color: "#94a3b8",
+                                    marginTop: 1,
+                                  }}
+                                >
+                                  {line.assemblyLineName}
+                                </div>
+                              </td>
+                              <td style={{ padding: "11px 14px" }}>
+                                {(() => {
+                                  const sc: Record<
+                                    string,
+                                    { bg: string; color: string }
+                                  > = {
+                                    PLANNED: {
+                                      bg: "#dbeafe",
+                                      color: "#1d4ed8",
+                                    },
+                                    IN_PROGRESS: {
+                                      bg: "#fef3c7",
+                                      color: "#d97706",
+                                    },
+                                    COMPLETED: {
+                                      bg: "#d1fae5",
+                                      color: "#059669",
+                                    },
+                                    CANCELLED: {
+                                      bg: "#fee2e2",
+                                      color: "#dc2626",
+                                    },
+                                  };
+                                  const c = sc[plan.status] || {
+                                    bg: "#f1f5f9",
+                                    color: "#64748b",
+                                  };
+                                  return (
+                                    <span
+                                      style={{
+                                        fontSize: 10,
+                                        fontWeight: 800,
+                                        padding: "3px 8px",
+                                        borderRadius: 20,
+                                        background: c.bg,
+                                        color: c.color,
+                                      }}
+                                    >
+                                      {plan.status}
+                                    </span>
+                                  );
+                                })()}
+                              </td>
+                              <td style={{ padding: "11px 14px" }}>
+                                <button
+                                  onClick={(ev) => {
+                                    ev.stopPropagation();
+                                    handleDeletePlan(plan._id, plan.week);
+                                  }}
+                                  style={{
+                                    border: "none",
+                                    background: "none",
+                                    cursor: "pointer",
+                                    color: "#fca5a5",
+                                    padding: 4,
+                                    borderRadius: 6,
+                                  }}
+                                  title="Delete plan"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        },
+                      )
+                    ) : (
+                      <tr>
+                        <td
+                          colSpan={12}
+                          style={{ padding: "48px 0", textAlign: "center" }}
+                        >
+                          <Package
+                            size={36}
+                            style={{
+                              color: "#e2e8f0",
+                              margin: "0 auto 8px",
+                              display: "block",
+                            }}
+                          />
+                          <div
+                            style={{
+                              fontSize: 13,
+                              fontWeight: 600,
+                              color: "#94a3b8",
+                            }}
+                          >
+                            No plans for {selectedWeek}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: 11,
+                              color: "#cbd5e1",
+                              marginTop: 4,
+                            }}
+                          >
+                            Click "+ Add Production Plan" to create one
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                  {tableRows.length > 0 && (
+                    <tfoot>
+                      <tr
+                        style={{
+                          background: "#f8fafc",
+                          borderTop: "2px solid #e2e8f0",
+                        }}
+                      >
+                        <td
+                          colSpan={3}
+                          style={{
+                            padding: "10px 14px",
+                            fontSize: 10,
+                            fontWeight: 800,
+                            color: "#94a3b8",
+                            textTransform: "uppercase",
+                            letterSpacing: 1,
+                          }}
+                        >
+                          Totals
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            fontWeight: 900,
+                            fontSize: 14,
+                            color: "#0f172a",
+                          }}
+                        >
+                          {tableRows
+                            .reduce((s, r) => s + r.planned, 0)
+                            .toLocaleString()}
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            fontWeight: 900,
+                            fontSize: 14,
+                            color: "#0f172a",
+                          }}
+                        >
+                          {tableRows.some((r) => r.entered > 0)
+                            ? tableRows
+                                .reduce((s, r) => s + r.actual, 0)
+                                .toLocaleString()
+                            : "—"}
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            fontWeight: 900,
+                            fontSize: 14,
+                          }}
+                        >
+                          {(() => {
+                            if (!tableRows.some((r) => r.entered > 0))
+                              return (
+                                <span style={{ color: "#e2e8f0" }}>—</span>
+                              );
+                            const b = tableRows.reduce(
+                              (s, r) => s + r.balance,
+                              0,
+                            );
+                            return (
+                              <span
+                                style={{
+                                  color: b >= 0 ? "#059669" : "#dc2626",
+                                }}
+                              >
+                                {b >= 0 ? `+${b}` : b}
+                              </span>
+                            );
+                          })()}
+                        </td>
+                        <td colSpan={6} />
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </>
+            ) : (
+              <>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr
+                      style={{
+                        background: "#f8fafc",
+                        borderBottom: "1px solid #e8ecf0",
+                      }}
+                    >
+                      {[
+                        "Day",
+                        "Date",
+                        "Model",
+                        "Part",
+                        "Planned",
+                        "Actual",
+                        "Balance",
+                        "Adherence",
+                        "Plant · Line",
+                        "Shift",
+                        "Status",
+                        "Remarks",
+                        "",
+                      ].map((h) => (
+                        <th
+                          key={h}
+                          style={{
+                            padding: "10px 14px",
+                            textAlign: "left",
+                            fontSize: 9,
+                            fontWeight: 800,
+                            color: "#94a3b8",
+                            textTransform: "uppercase",
+                            letterSpacing: 1.5,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {dailyTableRows.length > 0 ? (
+                      dailyTableRows.map(
+                        (
+                          {
+                            plan,
+                            entry,
+                            planned,
+                            actual,
+                            balance,
+                            adherence,
+                            entered,
+                            dayStatus,
+                          },
+                          idx,
+                        ) => {
+                          const bom = g.bom(plan);
+                          const mdl = g.model(plan);
+                          const plt = g.plant(plan);
+                          const line = g.line(plan);
+                          const canEnter = !entry.isFuture || entry.isToday;
+                          const s = SS[dayStatus];
+
+                          return (
+                            <tr
+                              key={`${plan._id}-${entry.date}`}
+                              onClick={
+                                canEnter
+                                  ? () => {
+                                      setSelectedPlanId(plan._id);
+                                      setEditingEntry(entry);
+                                    }
+                                  : undefined
+                              }
+                              style={{
+                                borderBottom: "1px solid #f1f5f9",
+                                cursor: canEnter ? "pointer" : "default",
+                                background:
+                                  plan._id === selectedPlanId
+                                    ? "#eff6ff"
+                                    : idx % 2 === 1
+                                      ? "#fafafa"
+                                      : "#fff",
+                                opacity: canEnter ? 1 : 0.65,
+                                transition: "background .1s",
+                              }}
+                            >
+                              <td
+                                style={{
+                                  padding: "11px 14px",
+                                  fontWeight: 900,
+                                  color: entry.isToday ? "#0f172a" : "#475569",
+                                }}
+                              >
+                                {entry.dayLabel}
+                              </td>
+                              <td
+                                style={{
+                                  padding: "11px 14px",
+                                  fontSize: 11,
+                                  color: "#64748b",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {entry.dateLabel}
+                              </td>
+                              <td style={{ padding: "11px 14px" }}>
+                                <span
+                                  style={{
+                                    background: "#ede9fe",
+                                    color: "#7c3aed",
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    padding: "3px 8px",
+                                    borderRadius: 20,
+                                  }}
+                                >
+                                  {mdl.modelName}
+                                </span>
+                              </td>
+                              <td style={{ padding: "11px 14px" }}>
+                                <div
+                                  style={{
+                                    fontSize: 12,
+                                    fontWeight: 700,
+                                    color: "#0f172a",
+                                  }}
+                                >
+                                  {bom.partNumber}
+                                </div>
+                                <div
+                                  style={{
+                                    fontSize: 10,
+                                    color: "#94a3b8",
+                                    maxWidth: 150,
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  {bom.partName}
+                                </div>
+                              </td>
+                              <td
+                                style={{
+                                  padding: "11px 14px",
+                                  fontWeight: 900,
+                                  color: "#0f172a",
+                                }}
+                              >
+                                {planned.toLocaleString()}
+                              </td>
+                              <td
+                                style={{
+                                  padding: "11px 14px",
+                                  fontWeight: 900,
+                                  color: entered ? "#0f172a" : "#e2e8f0",
+                                }}
+                              >
+                                {entered ? actual.toLocaleString() : "—"}
+                              </td>
+                              <td
+                                style={{
+                                  padding: "11px 14px",
+                                  fontWeight: 900,
+                                  color: entered
+                                    ? balance >= 0
+                                      ? "#059669"
+                                      : "#dc2626"
+                                    : "#e2e8f0",
+                                }}
+                              >
+                                {entered
+                                  ? balance >= 0
+                                    ? `+${balance}`
+                                    : balance
+                                  : "—"}
+                              </td>
+                              <td style={{ padding: "11px 14px" }}>
+                                {entered ? (
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: 7,
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        width: 52,
+                                        height: 5,
+                                        background: "#f1f5f9",
+                                        borderRadius: 3,
+                                        overflow: "hidden",
+                                      }}
+                                    >
+                                      <div
+                                        style={{
+                                          height: "100%",
+                                          borderRadius: 3,
+                                          background:
+                                            adherence >= 100
+                                              ? "#10b981"
+                                              : adherence >= 90
+                                                ? "#3b82f6"
+                                                : "#ef4444",
+                                          width: `${Math.min(adherence, 100)}%`,
+                                        }}
+                                      />
+                                    </div>
+                                    <span
+                                      style={{
+                                        fontSize: 11,
+                                        fontWeight: 700,
+                                        color: "#475569",
+                                      }}
+                                    >
+                                      {adherence.toFixed(0)}%
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span
+                                    style={{ color: "#e2e8f0", fontSize: 12 }}
+                                  >
+                                    —
+                                  </span>
+                                )}
+                              </td>
+                              <td style={{ padding: "11px 14px" }}>
+                                <div
+                                  style={{
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    color: "#334155",
+                                  }}
+                                >
+                                  {plt.plantName}
+                                </div>
+                                <div
+                                  style={{
+                                    fontSize: 10,
+                                    color: "#94a3b8",
+                                    marginTop: 1,
+                                  }}
+                                >
+                                  {line.assemblyLineName}
+                                </div>
+                              </td>
+                              <td
+                                style={{
+                                  padding: "11px 14px",
+                                  fontSize: 11,
+                                  fontWeight: 800,
+                                  color: "#475569",
+                                }}
+                              >
+                                {entry.shift || plan.shift || "—"}
+                              </td>
+                              <td style={{ padding: "11px 14px" }}>
+                                <span
+                                  style={{
+                                    fontSize: 10,
+                                    fontWeight: 800,
+                                    padding: "3px 8px",
+                                    borderRadius: 20,
+                                    background: s.bg,
+                                    color: s.numColor,
+                                  }}
+                                >
+                                  {s.label}
+                                </span>
+                              </td>
+                              <td
+                                style={{
+                                  padding: "11px 14px",
+                                  fontSize: 11,
+                                  color: "#64748b",
+                                  maxWidth: 180,
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {entry.notes || "—"}
+                              </td>
+                              <td style={{ padding: "11px 14px" }}>
+                                {canEnter ? (
+                                  <button
+                                    type="button"
+                                    onClick={(ev) => {
+                                      ev.stopPropagation();
+                                      setSelectedPlanId(plan._id);
+                                      setEditingEntry(entry);
+                                    }}
+                                    style={{
+                                      border: "1px solid #e2e8f0",
+                                      background: "#fff",
+                                      cursor: "pointer",
+                                      color: "#1d4ed8",
+                                      padding: "4px 8px",
+                                      borderRadius: 7,
+                                      fontSize: 11,
+                                      fontWeight: 800,
+                                      whiteSpace: "nowrap",
+                                    }}
+                                  >
+                                    {entered ? "Edit" : "Enter"}
+                                  </button>
+                                ) : (
+                                  <span
+                                    style={{ color: "#cbd5e1", fontSize: 11 }}
+                                  >
+                                    Scheduled
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        },
+                      )
+                    ) : (
+                      <tr>
+                        <td
+                          colSpan={13}
+                          style={{ padding: "48px 0", textAlign: "center" }}
+                        >
+                          <Package
+                            size={36}
+                            style={{
+                              color: "#e2e8f0",
+                              margin: "0 auto 8px",
+                              display: "block",
+                            }}
+                          />
+                          <div
+                            style={{
+                              fontSize: 13,
+                              fontWeight: 600,
+                              color: "#94a3b8",
+                            }}
+                          >
+                            No daily plans for {selectedWeek}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </>
+            )}
+          </div>
+        </section>
         {loading && plans.length === 0 && (
           <div
             style={{

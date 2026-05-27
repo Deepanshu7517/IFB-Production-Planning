@@ -220,7 +220,7 @@ pub fn run() {
                 .join("public")
                 .to_string_lossy()
                 .to_string();
-`
+
             println!("EXE dir: {}", frontend_path);
 
             tauri::async_runtime::spawn(async move {

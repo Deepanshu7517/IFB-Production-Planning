@@ -184110,7 +184110,7 @@ var bomSchema = new import_mongoose2.default.Schema(
     partName: String,
     childPartList: [childBomSchema],
     // ── Manually set via Edit modal — NEVER overwritten on re-upload ──────────
-    price: { type: Number, default: 0 },
+    // price: { type: Number, default: 0 },
     // Parent ObjectId ref
     modelRef: {
       type: import_mongoose2.default.Schema.Types.ObjectId,
@@ -184164,7 +184164,7 @@ var matrixSchema = new import_mongoose2.default.Schema(
       _id: import_mongoose2.default.Schema.Types.ObjectId,
       partNumber: String,
       partName: String,
-      price: Number,
+      // price: Number,
       childPartList: [childBomSchema]
     },
     shift: {
@@ -184189,7 +184189,10 @@ var appUserSchema = new import_mongoose2.default.Schema(
   { timestamps: true }
 );
 var Plant = localhostConn.model("Plant", plantSchema);
-var AssemblyLine = localhostConn.model("AssemblyLine", assemblyLineSchema);
+var AssemblyLine = localhostConn.model(
+  "AssemblyLine",
+  assemblyLineSchema
+);
 var Model = localhostConn.model("Model", modelSchema);
 var BOM = localhostConn.model("BOM", bomSchema);
 var Matrix = localhostConn.model("Matrix", matrixSchema);
@@ -184991,9 +184994,94 @@ var buildBomSnapshot = async (partNumber) => {
     _id: b._id,
     partNumber: b.partNumber,
     partName: b.partName,
-    price: b.price ?? 0,
+    // price: b.price ?? 0,
     childPartList: b.childPartList ?? []
   };
+};
+var buildBomSnapshotFromDoc = (b) => ({
+  _id: b._id,
+  partNumber: b.partNumber,
+  partName: b.partName,
+  childPartList: b.childPartList ?? []
+});
+var buildMatrixRow = (bomDoc, matrixDoc = null) => ({
+  _id: bomDoc._id,
+  matrixId: matrixDoc?._id ?? null,
+  bomId: bomDoc._id,
+  model: bomDoc.model,
+  bom: buildBomSnapshotFromDoc(bomDoc),
+  shift: matrixDoc?.shift || "A",
+  manpowerAvailability: matrixDoc?.manpowerAvailability ?? 0,
+  isAutoMapped: true,
+  createdAt: matrixDoc?.createdAt ?? bomDoc.createdAt,
+  updatedAt: matrixDoc?.updatedAt ?? bomDoc.updatedAt
+});
+var getAutoMappedMatrixRows = async () => {
+  const bomDocs = await BOM.find({
+    "model.modelId": { $exists: true, $ne: "" }
+  }).lean();
+  const activePartNumbers = bomDocs.map((b) => b.partNumber);
+  await Matrix.deleteMany({
+    "bom.partNumber": { $nin: activePartNumbers }
+  });
+  const rows = [];
+  for (const bomDoc of bomDocs) {
+    const existingMatrix = await Matrix.findOne({
+      "bom.partNumber": bomDoc.partNumber
+    }).lean();
+    const matrixDoc = await Matrix.findOneAndUpdate(
+      { "bom.partNumber": bomDoc.partNumber },
+      {
+        $set: {
+          model: bomDoc.model,
+          bom: buildBomSnapshotFromDoc(bomDoc),
+          shift: existingMatrix?.shift || "A",
+          manpowerAvailability: existingMatrix?.manpowerAvailability ?? 0
+        }
+      },
+      {
+        upsert: true,
+        new: true,
+        setDefaultsOnInsert: true
+      }
+    ).lean();
+    rows.push(buildMatrixRow(bomDoc, matrixDoc));
+  }
+  return rows;
+};
+var upsertMatrixShift = async ({ bomPartNumber, shift }) => {
+  const selectedShift = shift || "A";
+  if (!["A", "B", "C"].includes(selectedShift)) {
+    const err = new Error("Shift must be A, B, or C");
+    err.statusCode = 400;
+    throw err;
+  }
+  const bomDoc = await BOM.findOne({ partNumber: bomPartNumber }).lean();
+  if (!bomDoc) {
+    const err = new Error(`BOM not found: ${bomPartNumber}`);
+    err.statusCode = 400;
+    throw err;
+  }
+  if (!bomDoc.model?.modelId) {
+    const err = new Error(
+      `BOM "${bomPartNumber}" has no Model assigned yet. Edit the BOM first to set its Model.`
+    );
+    err.statusCode = 400;
+    throw err;
+  }
+  const matrixDoc = await Matrix.findOneAndUpdate(
+    { "bom.partNumber": bomPartNumber },
+    {
+      $set: {
+        model: bomDoc.model,
+        bom: buildBomSnapshotFromDoc(bomDoc),
+        // shift,
+        shift: selectedShift
+      }
+    },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  ).lean();
+  return buildMatrixRow(bomDoc, matrixDoc);
 };
 router3.get("/hierarchy", async (req, res) => {
   try {
@@ -185032,7 +185120,7 @@ router3.get("/hierarchy", async (req, res) => {
                   _id: b._id,
                   partNumber: b.partNumber,
                   partName: b.partName,
-                  price: b.price,
+                  // price: b.price,
                   childPartList: b.childPartList,
                   lastUpdated: b.lastUpdated
                 }))
@@ -185049,17 +185137,27 @@ router3.get("/hierarchy", async (req, res) => {
   }
 });
 router3.post("/BOM/upload-excel", upload.single("file"), async (req, res) => {
-  const tempInput = import_path3.default.join(TEMP_PATH, `bom_upload_${Date.now()}_${Math.random().toString(36).slice(2)}.xlsx`);
+  const tempInput = import_path3.default.join(
+    TEMP_PATH,
+    `bom_upload_${Date.now()}_${Math.random().toString(36).slice(2)}.xlsx`
+  );
   const tempMaster = import_path3.default.join(TEMP_PATH, `bom_master_${Date.now()}.xlsx`);
   try {
-    console.log("\n\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588  BOM UPLOAD (FTP) \u2014 START  \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588");
+    console.log(
+      "\n\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588  BOM UPLOAD (NEW FORMAT) \u2014 START  \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588"
+    );
     if (!req.file)
       return res.status(400).json({ success: false, message: "No file uploaded" });
     if (!/\.(xlsx|xls)$/i.test(req.file.originalname || ""))
-      return res.status(400).json({ success: false, message: "Invalid file type \u2014 upload .xlsx or .xls" });
+      return res.status(400).json({
+        success: false,
+        message: "Invalid file type \u2014 upload .xlsx or .xls"
+      });
     import_fs3.default.writeFileSync(tempInput, req.file.buffer);
     const masterExists = await downloadFromFtp("bom_master.xlsx", tempMaster);
-    console.log(`[FTP] Existing master: ${masterExists ? "found" : "not found (first upload)"}`);
+    console.log(
+      `[FTP] Existing master: ${masterExists ? "found" : "not found (first upload)"}`
+    );
     const workbook = import_xlsx2.default.readFile(tempInput);
     const sheetName = workbook.SheetNames[0];
     const rawRows = import_xlsx2.default.utils.sheet_to_json(workbook.Sheets[sheetName], {
@@ -185069,6 +185167,10 @@ router3.post("/BOM/upload-excel", upload.single("file"), async (req, res) => {
     console.log("[INFO] Sheet:", sheetName, "| total rows:", rawRows.length);
     if (rawRows.length < 2)
       return res.status(400).json({ success: false, message: "File has no data rows" });
+    const allModels = await Model.find().lean();
+    const modelNameMap = new Map(
+      allModels.map((m) => [m.modelName.trim().toLowerCase(), m])
+    );
     const bomMap = {};
     let skipped = 0;
     for (let i = 1; i < rawRows.length; i++) {
@@ -185077,65 +185179,109 @@ router3.post("/BOM/upload-excel", upload.single("file"), async (req, res) => {
         skipped++;
         continue;
       }
+      const modelNameHint = String(row[0] ?? "").trim();
       const partNumber = String(row[1] ?? "").trim();
       const partName = String(row[2] ?? "").trim();
-      const partCode = String(row[4] ?? "").trim();
-      const qty = parseFloat(row[5]) || 0;
-      const unit = String(row[6] ?? "").trim() || "EA";
-      const description = String(row[7] ?? "").trim();
+      const partCode = String(row[3] ?? "").trim();
+      const qty = parseFloat(row[4]) || 0;
+      const unit = String(row[5] ?? "").trim() || "EA";
+      const description = String(row[6] ?? "").trim();
       if (!partNumber) {
         skipped++;
         continue;
       }
       if (!bomMap[partNumber]) {
-        bomMap[partNumber] = { partNumber, partName, childPartList: [] };
+        bomMap[partNumber] = {
+          partNumber,
+          partName,
+          modelNameHint,
+          childPartList: []
+        };
       } else {
-        if (!bomMap[partNumber].partName && partName) bomMap[partNumber].partName = partName;
+        if (!bomMap[partNumber].partName && partName)
+          bomMap[partNumber].partName = partName;
+        if (!bomMap[partNumber].modelNameHint && modelNameHint) {
+          bomMap[partNumber].modelNameHint = modelNameHint;
+        }
       }
       if (partCode) {
         const dup = bomMap[partNumber].childPartList.some(
           (c) => c.partCode === partCode && c.qty === qty
         );
-        if (!dup) bomMap[partNumber].childPartList.push({ partCode, description, qty, unit });
+        if (!dup)
+          bomMap[partNumber].childPartList.push({
+            partCode,
+            description,
+            qty,
+            unit
+          });
       }
     }
     const incoming = Object.values(bomMap);
-    console.log("[PARSED] Unique FG parts:", incoming.length, "| skipped rows:", skipped);
+    console.log(
+      "[PARSED] Unique FG parts:",
+      incoming.length,
+      "| skipped rows:",
+      skipped
+    );
     if (incoming.length === 0)
-      return res.status(400).json({ success: false, message: "No valid BOM data found in file" });
-    const childHash = (list) => [...list].sort((a, b) => a.partCode.localeCompare(b.partCode) || a.qty - b.qty).map((c) => `${c.partCode}|${c.description}|${c.qty}|${c.unit}`).join(";;");
-    let created = 0, updated = 0, unchanged = 0;
+      return res.status(400).json({
+        success: false,
+        message: "No valid BOM data found in file"
+      });
+    console.log("[RESET] Removing old BOM data...");
+    await BOM.deleteMany({});
+    console.log("[RESET] Old BOM data removed");
+    const newBomDocs = [];
+    const modelNotFound = [];
     for (const inc of incoming) {
-      const existing = await BOM.findOne({ partNumber: inc.partNumber });
-      if (!existing) {
-        await BOM.create({ ...inc, price: 0, lastUpdated: /* @__PURE__ */ new Date() });
-        created++;
-        console.log(`  [CREATE] ${inc.partNumber}`);
-        continue;
+      let resolvedModel = null;
+      let resolvedModelRef = null;
+      if (inc.modelNameHint) {
+        const matchedModel = modelNameMap.get(inc.modelNameHint.toLowerCase());
+        if (matchedModel) {
+          resolvedModelRef = matchedModel._id;
+          resolvedModel = {
+            _id: matchedModel._id,
+            modelId: matchedModel.modelId,
+            modelName: matchedModel.modelName,
+            assemblyLine: matchedModel.assemblyLine
+          };
+        } else {
+          modelNotFound.push({
+            partNumber: inc.partNumber,
+            modelHint: inc.modelNameHint
+          });
+        }
       }
-      const nameChanged = existing.partName !== inc.partName;
-      const childrenChanged = childHash(existing.childPartList ?? []) !== childHash(inc.childPartList);
-      if (nameChanged || childrenChanged) {
-        await BOM.findByIdAndUpdate(existing._id, {
-          partName: inc.partName,
-          childPartList: inc.childPartList,
-          lastUpdated: /* @__PURE__ */ new Date()
-        });
-        updated++;
-        console.log(`  [UPDATE] ${inc.partNumber}  (price & model preserved)`);
-      } else {
-        unchanged++;
-        console.log(`  [SKIP]   ${inc.partNumber}`);
+      const bomDoc = {
+        partNumber: inc.partNumber,
+        partName: inc.partName,
+        childPartList: inc.childPartList,
+        // price: 0,
+        lastUpdated: /* @__PURE__ */ new Date()
+      };
+      if (resolvedModel) {
+        bomDoc.model = resolvedModel;
+        bomDoc.modelRef = resolvedModelRef;
       }
+      newBomDocs.push(bomDoc);
     }
+    await BOM.insertMany(newBomDocs);
+    await getAutoMappedMatrixRows();
+    console.log(`[INSERTED] ${newBomDocs.length} BOM records`);
     await uploadToFtp(tempInput, "bom_master.xlsx");
-    console.log("[FTP] Master BOM file updated on FTP server");
-    console.log(`[DONE] Created:${created} Updated:${updated} Unchanged:${unchanged}`);
-    console.log("\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588  BOM UPLOAD (FTP) \u2014 END  \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\n");
+    console.log("[FTP] Master BOM updated");
+    console.log("\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588  BOM FULL REPLACEMENT COMPLETE  \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\n");
     return res.json({
       success: true,
-      message: `Import complete: ${created} created, ${updated} updated, ${unchanged} unchanged`,
-      summary: { created, updated, unchanged, total: incoming.length, skippedRows: skipped }
+      message: `BOM replaced successfully with ${newBomDocs.length} records`,
+      summary: {
+        totalInserted: newBomDocs.length,
+        skippedRows: skipped,
+        modelNotFound: modelNotFound.length,
+        modelNotFoundDetails: modelNotFound
+      }
     });
   } catch (err) {
     console.error("BOM Upload Error:", err.message);
@@ -185150,7 +185296,10 @@ router3.get("/BOM/download-master", async (req, res) => {
   try {
     const exists = await downloadFromFtp("bom_master.xlsx", tempFile);
     if (!exists) {
-      return res.status(404).json({ success: false, message: "No master BOM file found yet. Upload one first." });
+      return res.status(404).json({
+        success: false,
+        message: "No master BOM file found yet. Upload one first."
+      });
     }
     res.download(tempFile, "bom_master.xlsx", () => cleanupTemp(tempFile));
   } catch (err) {
@@ -185160,9 +185309,8 @@ router3.get("/BOM/download-master", async (req, res) => {
 });
 router3.patch("/BOM/:id/meta", async (req, res) => {
   try {
-    const { price, modelObjId } = req.body;
+    const { modelObjId } = req.body;
     const update = { lastUpdated: /* @__PURE__ */ new Date() };
-    if (price !== void 0) update.price = parseFloat(price) || 0;
     if (modelObjId) {
       const snapshot = await buildModelSnapshot(modelObjId);
       if (!snapshot)
@@ -185173,17 +185321,39 @@ router3.patch("/BOM/:id/meta", async (req, res) => {
       update.modelRef = null;
       update.model = {};
     }
-    const updated = await BOM.findByIdAndUpdate(req.params.id, update, { new: true });
+    const updated = await BOM.findByIdAndUpdate(req.params.id, update, {
+      new: true
+    });
     if (!updated) return res.status(404).json({ message: "BOM not found" });
-    console.log(`[BOM META] ${updated.partNumber} \u2192 price=${updated.price} | model=${updated.model?.modelName || "\u2014"}`);
+    console.log(
+      // `[BOM META] ${updated.partNumber} → price=${updated.price} | model=${updated.model?.modelName || "—"}`,
+      `[BOM META] ${updated.partNumber} | model=${updated.model?.modelName || "\u2014"}`
+    );
+    await getAutoMappedMatrixRows();
     res.json({ success: true, data: updated });
   } catch (err) {
     console.error("BOM META Error:", err.message);
     res.status(500).json({ message: err.message });
   }
 });
+router3.patch("/matrix/:partNumber/shift", async (req, res) => {
+  try {
+    const row = await upsertMatrixShift({
+      bomPartNumber: req.params.partNumber,
+      shift: req.body.shift
+    });
+    res.json({ success: true, data: row });
+  } catch (err) {
+    console.error("Matrix Shift Error:", err.message);
+    res.status(err.statusCode || 500).json({ message: err.message });
+  }
+});
 router3.get("/:type", async (req, res) => {
   try {
+    const type = req.params.type.toLowerCase();
+    if (type === "matrix") {
+      return res.json(await getAutoMappedMatrixRows());
+    }
     const M = getModelByType(req.params.type);
     if (!M) return res.status(404).json({ message: "Unknown type" });
     res.json(await M.find().lean());
@@ -185196,7 +185366,10 @@ router3.post("/:type", async (req, res) => {
     const type = req.params.type.toLowerCase();
     if (type === "plant") {
       const plantId = await generateId(Plant, "plantId", "PLT");
-      const doc = await Plant.create({ plantId, plantName: req.body.plantName });
+      const doc = await Plant.create({
+        plantId,
+        plantName: req.body.plantName
+      });
       return res.status(201).json(doc);
     }
     if (type === "assemblyline") {
@@ -185204,7 +185377,11 @@ router3.post("/:type", async (req, res) => {
       const plantSnap = await buildPlantSnapshot(plantObjId);
       if (!plantSnap)
         return res.status(400).json({ message: `Plant not found: ${plantObjId}` });
-      const assemblyLineId = await generateId(AssemblyLine, "assemblyLineId", "ASL");
+      const assemblyLineId = await generateId(
+        AssemblyLine,
+        "assemblyLineId",
+        "ASL"
+      );
       const doc = await AssemblyLine.create({
         assemblyLineId,
         assemblyLineName,
@@ -185231,7 +185408,8 @@ router3.post("/:type", async (req, res) => {
     if (type === "matrix") {
       const { bomPartNumber, shift, manpowerAvailability } = req.body;
       const bomSnap = await buildBomSnapshot(bomPartNumber);
-      if (!bomSnap) return res.status(400).json({ message: `BOM not found: ${bomPartNumber}` });
+      if (!bomSnap)
+        return res.status(400).json({ message: `BOM not found: ${bomPartNumber}` });
       const bomDoc = await BOM.findOne({ partNumber: bomPartNumber }).lean();
       if (!bomDoc?.model?.modelId) {
         return res.status(400).json({
@@ -185250,7 +185428,15 @@ router3.post("/:type", async (req, res) => {
     if (type === "users") {
       const { name, username, email, employeeId, role, department, password } = req.body;
       try {
-        const doc = await AppUser.create({ name, username, email, employeeId, role, department, password });
+        const doc = await AppUser.create({
+          name,
+          username,
+          email,
+          employeeId,
+          role,
+          department,
+          password
+        });
         return res.status(201).json(doc);
       } catch (err) {
         if (err.code === 11e3) {
@@ -185276,7 +185462,11 @@ router3.put("/:type/:id", async (req, res) => {
         { new: true }
       );
       if (!updated) return res.status(404).json({ message: "Plant not found" });
-      const snap = { _id: updated._id, plantId: updated.plantId, plantName: updated.plantName };
+      const snap = {
+        _id: updated._id,
+        plantId: updated.plantId,
+        plantName: updated.plantName
+      };
       await AssemblyLine.updateMany({ plantRef: updated._id }, { plant: snap });
       await Model.updateMany(
         { "assemblyLine.plant._id": updated._id },
@@ -185286,7 +185476,9 @@ router3.put("/:type/:id", async (req, res) => {
         { "model.assemblyLine.plant._id": updated._id },
         { "model.assemblyLine.plant": snap }
       );
-      console.log(`[CASCADE] Plant ${updated.plantId} \u2192 refreshed AssemblyLines, Models, BOMs`);
+      console.log(
+        `[CASCADE] Plant ${updated.plantId} \u2192 refreshed AssemblyLines, Models, BOMs`
+      );
       return res.json(updated);
     }
     if (type === "assemblyline") {
@@ -185299,7 +185491,8 @@ router3.put("/:type/:id", async (req, res) => {
         { assemblyLineName, capacity, plantRef: plantObjId, plant: plantSnap },
         { new: true }
       );
-      if (!updated) return res.status(404).json({ message: "AssemblyLine not found" });
+      if (!updated)
+        return res.status(404).json({ message: "AssemblyLine not found" });
       const alSnap = {
         _id: updated._id,
         assemblyLineId: updated.assemblyLineId,
@@ -185307,12 +185500,17 @@ router3.put("/:type/:id", async (req, res) => {
         capacity: updated.capacity,
         plant: plantSnap
       };
-      await Model.updateMany({ assemblyLineRef: updated._id }, { assemblyLine: alSnap });
+      await Model.updateMany(
+        { assemblyLineRef: updated._id },
+        { assemblyLine: alSnap }
+      );
       await BOM.updateMany(
         { "model.assemblyLine._id": updated._id },
         { "model.assemblyLine": alSnap }
       );
-      console.log(`[CASCADE] AssemblyLine ${updated.assemblyLineId} \u2192 refreshed Models, BOMs`);
+      console.log(
+        `[CASCADE] AssemblyLine ${updated.assemblyLineId} \u2192 refreshed Models, BOMs`
+      );
       return res.json(updated);
     }
     if (type === "model") {
@@ -185339,7 +185537,8 @@ router3.put("/:type/:id", async (req, res) => {
     if (type === "matrix") {
       const { bomPartNumber, shift, manpowerAvailability } = req.body;
       const bomSnap = await buildBomSnapshot(bomPartNumber);
-      if (!bomSnap) return res.status(400).json({ message: `BOM not found: ${bomPartNumber}` });
+      if (!bomSnap)
+        return res.status(400).json({ message: `BOM not found: ${bomPartNumber}` });
       const bomDoc = await BOM.findOne({ partNumber: bomPartNumber }).lean();
       if (!bomDoc?.model?.modelId) {
         return res.status(400).json({
@@ -185352,7 +185551,8 @@ router3.put("/:type/:id", async (req, res) => {
         { model: modelSnap, bom: bomSnap, shift, manpowerAvailability },
         { new: true }
       );
-      if (!updated) return res.status(404).json({ message: "Matrix not found" });
+      if (!updated)
+        return res.status(404).json({ message: "Matrix not found" });
       return res.json(updated);
     }
     if (type === "users") {
@@ -185360,8 +185560,12 @@ router3.put("/:type/:id", async (req, res) => {
       const update = { name, username, email, employeeId, role, department };
       if (password) update.password = password;
       try {
-        const updated = await AppUser.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true });
-        if (!updated) return res.status(404).json({ message: "User not found" });
+        const updated = await AppUser.findByIdAndUpdate(req.params.id, update, {
+          new: true,
+          runValidators: true
+        });
+        if (!updated)
+          return res.status(404).json({ message: "User not found" });
         return res.json(updated);
       } catch (err) {
         if (err.code === 11e3) {
@@ -187002,6 +187206,7 @@ var productionAuth_route_default = router6;
 
 // src/index.js
 import_dotenv3.default.config();
+import_dotenv3.default.config({ path: process.env.ENV_FILE_PATH || ".env" });
 var app2 = (0, import_express8.default)();
 startFtpServer();
 startFolderWatcher();
@@ -187056,12 +187261,14 @@ app2.use((err, req, res, next) => {
     message: err.message || "Internal server error"
   });
 });
-var PORT = process.env.PORT || 5001;
-var HOST = process.env.HOST || "0.0.0.0";
+var PORT = Number(process.env.PORT || 5001);
+var NETWORK_IP = (process.env.NETWORK_IP || "127.0.0.1").trim();
+var HOST = NETWORK_IP;
 app2.listen(PORT, HOST, () => {
-  console.log(`Server running on http://${HOST}:${PORT}`);
+  const base = `http://${NETWORK_IP}:${PORT}`;
+  console.log(`Server running on ${base}`);
   console.log(`Local:   http://localhost:${PORT}`);
-  console.log(`Network: http://<machine-ip>:${PORT}`);
+  console.log(`Network: ${base}`);
 });
 var index_default = app2;
 /*! Bundled license information:

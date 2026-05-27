@@ -318,14 +318,23 @@ app.use((err, req, res, next) => {
     message: err.message || 'Internal server error',
   });
 });
-
-const PORT = process.env.PORT || 5001;
-const HOST = process.env.HOST || '0.0.0.0';
+const PORT = Number(process.env.PORT || 5001);
+const NETWORK_IP = (process.env.NETWORK_IP || '127.0.0.1').trim();
+const HOST = NETWORK_IP; // bind directly to this IP
 
 app.listen(PORT, HOST, () => {
-  console.log(`Server running on http://${HOST}:${PORT}`);
+  const base = `http://${NETWORK_IP}:${PORT}`;
+  console.log(`Server running on ${base}`);
   console.log(`Local:   http://localhost:${PORT}`);
-  console.log(`Network: http://<machine-ip>:${PORT}`);
+  console.log(`Network: ${base}`);
 });
+// const PORT = process.env.PORT || 5001;
+// const HOST = process.env.HOST || '0.0.0.0';
+
+// app.listen(PORT, HOST, () => {
+//   console.log(`Server running on http://${HOST}:${PORT}`);
+//   console.log(`Local:   http://localhost:${PORT}`);
+//   console.log(`Network: http://<machine-ip>:${PORT}`);
+// });
 
 export default app;
