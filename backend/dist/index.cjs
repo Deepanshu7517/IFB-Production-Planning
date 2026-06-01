@@ -185998,7 +185998,11 @@ var createProductionPlan = async (req, res) => {
     const planYear = year || (/* @__PURE__ */ new Date()).getFullYear();
     const planCapacity = capacity != null ? capacity : matrix.model?.assemblyLine?.capacity ?? 0;
     const planDays = workingDays ?? 6;
-    const exists = await productionPlan_model_default.exists({ matrixRef: matrixId, week, year: planYear });
+    const exists = await productionPlan_model_default.exists({
+      matrixRef: matrixId,
+      week,
+      year: planYear
+    });
     if (exists) {
       return res.status(400).json({
         success: false,
@@ -186046,7 +186050,8 @@ var getAllProductionPlans = async (req, res) => {
     if (week) query.week = week;
     if (year) query.year = parseInt(year);
     if (plantId) query["model.assemblyLine.plant.plantId"] = plantId;
-    if (assemblyLineId) query["model.assemblyLine.assemblyLineId"] = assemblyLineId;
+    if (assemblyLineId)
+      query["model.assemblyLine.assemblyLineId"] = assemblyLineId;
     if (modelId) query["model.modelId"] = modelId;
     if (status) query.status = status;
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -186073,7 +186078,8 @@ var getAllProductionPlans = async (req, res) => {
 var getProductionPlanById = async (req, res) => {
   try {
     const plan = await productionPlan_model_default.findById(req.params.id);
-    if (!plan) return res.status(404).json({ success: false, message: "Production plan not found" });
+    if (!plan)
+      return res.status(404).json({ success: false, message: "Production plan not found" });
     res.status(200).json({ success: true, data: plan });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -186082,12 +186088,14 @@ var getProductionPlanById = async (req, res) => {
 var updateProductionPlan = async (req, res) => {
   try {
     const plan = await productionPlan_model_default.findById(req.params.id);
-    if (!plan) return res.status(404).json({ success: false, message: "Production plan not found" });
+    if (!plan)
+      return res.status(404).json({ success: false, message: "Production plan not found" });
     const { matrixId, capacity, workingDays, status, notes } = req.body;
     let needsRegenerate = false;
     if (matrixId && matrixId !== plan.matrixRef?.toString()) {
       const matrix = await Matrix.findById(matrixId).lean();
-      if (!matrix) return res.status(404).json({ success: false, message: `Matrix not found: ${matrixId}` });
+      if (!matrix)
+        return res.status(404).json({ success: false, message: `Matrix not found: ${matrixId}` });
       plan.matrixRef = matrixId;
       plan.model = matrix.model;
       plan.bom = matrix.bom;
@@ -186106,7 +186114,12 @@ var updateProductionPlan = async (req, res) => {
     if (notes !== void 0) plan.notes = notes;
     plan.updatedBy = req.user?._id;
     if (needsRegenerate) {
-      plan.dailyEntries = buildFreshEntries(plan.capacity, plan.workingDays, plan.week, plan.year);
+      plan.dailyEntries = buildFreshEntries(
+        plan.capacity,
+        plan.workingDays,
+        plan.week,
+        plan.year
+      );
     }
     await plan.save();
     res.status(200).json({
@@ -186122,7 +186135,8 @@ var updateProductionPlan = async (req, res) => {
 var deleteProductionPlan = async (req, res) => {
   try {
     const plan = await productionPlan_model_default.findByIdAndDelete(req.params.id);
-    if (!plan) return res.status(404).json({ success: false, message: "Production plan not found" });
+    if (!plan)
+      return res.status(404).json({ success: false, message: "Production plan not found" });
     res.status(200).json({ success: true, message: "Production plan deleted successfully" });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -186131,7 +186145,8 @@ var deleteProductionPlan = async (req, res) => {
 var getDailyEntries = async (req, res) => {
   try {
     const plan = await productionPlan_model_default.findById(req.params.id);
-    if (!plan) return res.status(404).json({ success: false, message: "Production plan not found" });
+    if (!plan)
+      return res.status(404).json({ success: false, message: "Production plan not found" });
     res.status(200).json({
       success: true,
       data: {
@@ -186149,7 +186164,10 @@ var getDailyEntries = async (req, res) => {
             assemblyLineId: plan.model?.assemblyLine?.assemblyLineId,
             assemblyLineName: plan.model?.assemblyLine?.assemblyLineName
           },
-          model: { modelId: plan.model?.modelId, modelName: plan.model?.modelName },
+          model: {
+            modelId: plan.model?.modelId,
+            modelName: plan.model?.modelName
+          },
           bom: plan.bom
         },
         entries: plan.dailyEntries,
@@ -186166,13 +186184,20 @@ var updateDailyEntry = async (req, res) => {
     const { id, date } = req.params;
     const { actual, notes, shift, redistribution } = req.body;
     if (actual !== null && (actual === void 0 || actual < 0)) {
-      return res.status(400).json({ success: false, message: "actual must be null or a non-negative number" });
+      return res.status(400).json({
+        success: false,
+        message: "actual must be null or a non-negative number"
+      });
     }
     const plan = await productionPlan_model_default.findById(id);
-    if (!plan) return res.status(404).json({ success: false, message: "Production plan not found" });
+    if (!plan)
+      return res.status(404).json({ success: false, message: "Production plan not found" });
     const idx = plan.dailyEntries.findIndex((e) => e.date === date);
     if (idx === -1) {
-      return res.status(404).json({ success: false, message: `No daily entry mapped for date ${date}` });
+      return res.status(404).json({
+        success: false,
+        message: `No daily entry mapped for date ${date}`
+      });
     }
     plan.dailyEntries[idx].actual = actual !== null ? parseInt(actual) : null;
     if (notes !== void 0) plan.dailyEntries[idx].notes = notes;
@@ -186196,7 +186221,8 @@ var updateDailyEntry = async (req, res) => {
     }
     const allDone = plan.dailyEntries.every((e) => e.actual !== null);
     if (allDone) plan.status = "COMPLETED";
-    else if (plan.status === "PLANNED" && plan.dailyEntries.some((e) => e.actual !== null)) plan.status = "IN_PROGRESS";
+    else if (plan.status === "PLANNED" && plan.dailyEntries.some((e) => e.actual !== null))
+      plan.status = "IN_PROGRESS";
     plan.updatedBy = req.user?._id;
     await plan.save();
     const daysToUpdate = plan.dailyEntries.filter((e) => e.date >= date);
@@ -186253,7 +186279,8 @@ var updateDailyEntry = async (req, res) => {
 var getWeeklySummary = async (req, res) => {
   try {
     const { week, year } = req.query;
-    if (!week) return res.status(400).json({ success: false, message: "week is required" });
+    if (!week)
+      return res.status(400).json({ success: false, message: "week is required" });
     const y = year ? parseInt(year) : (/* @__PURE__ */ new Date()).getFullYear();
     const summary = await productionPlan_model_default.getWeeklySummary(week, y);
     res.status(200).json({
@@ -186296,7 +186323,8 @@ var getAnnualOverview = async (req, res) => {
 var getPlantSummary = async (req, res) => {
   try {
     const { plantId, year } = req.query;
-    if (!plantId) return res.status(400).json({ success: false, message: "plantId is required" });
+    if (!plantId)
+      return res.status(400).json({ success: false, message: "plantId is required" });
     const y = year ? parseInt(year) : (/* @__PURE__ */ new Date()).getFullYear();
     const summary = await productionPlan_model_default.getPlantSummary(plantId, y);
     res.status(200).json({ success: true, data: summary });
@@ -186308,12 +186336,18 @@ var getProductionPlansByRange = async (req, res) => {
   try {
     const { startWeek, endWeek, year, plantId } = req.query;
     if (!startWeek || !endWeek) {
-      return res.status(400).json({ success: false, message: "startWeek and endWeek are required" });
+      return res.status(400).json({
+        success: false,
+        message: "startWeek and endWeek are required"
+      });
     }
     const y = year ? parseInt(year) : (/* @__PURE__ */ new Date()).getFullYear();
     const start = parseInt(startWeek.substring(1));
     const end = parseInt(endWeek.substring(1));
-    const weeks = Array.from({ length: end - start + 1 }, (_, i) => `W${start + i}`);
+    const weeks = Array.from(
+      { length: end - start + 1 },
+      (_, i) => `W${start + i}`
+    );
     const query = { week: { $in: weeks }, year: y };
     if (plantId) query["model.assemblyLine.plant.plantId"] = plantId;
     const plans = await productionPlan_model_default.find(query).sort({ week: 1 });
@@ -186330,7 +186364,9 @@ var bulkCreateProductionPlans = async (req, res) => {
     }
     const matrixIds = [...new Set(plans.map((p) => p.matrixId))];
     const matrices = await Matrix.find({ _id: { $in: matrixIds } }).lean();
-    const matrixMap = Object.fromEntries(matrices.map((m) => [m._id.toString(), m]));
+    const matrixMap = Object.fromEntries(
+      matrices.map((m) => [m._id.toString(), m])
+    );
     const enriched = plans.map((p) => {
       const matrix = matrixMap[p.matrixId];
       if (!matrix) throw new Error(`Matrix not found: ${p.matrixId}`);
@@ -186348,30 +186384,44 @@ var bulkCreateProductionPlans = async (req, res) => {
         shift: matrix.shift,
         status: p.status || "PLANNED",
         notes: p.notes || "",
-        dailyEntries: buildFreshEntries(planCapacity, planDays, p.week, planYear),
+        dailyEntries: buildFreshEntries(
+          planCapacity,
+          planDays,
+          p.week,
+          planYear
+        ),
         createdBy: req.user?._id
       };
     });
-    const created = await productionPlan_model_default.insertMany(enriched, { ordered: false });
+    const created = await productionPlan_model_default.insertMany(enriched, {
+      ordered: false
+    });
     res.status(201).json({ success: true, data: created, count: created.length });
   } catch (err) {
     if (err.code === 11e3) {
-      return res.status(400).json({ success: false, message: "Some plans already exist (duplicate key)" });
+      return res.status(400).json({
+        success: false,
+        message: "Some plans already exist (duplicate key)"
+      });
     }
     res.status(500).json({ success: false, message: err.message });
   }
 };
 var getCustomWeekInfo = (dateObjUTC) => {
-  const d = new Date(Date.UTC(
-    dateObjUTC.getUTCFullYear(),
-    dateObjUTC.getUTCMonth(),
-    dateObjUTC.getUTCDate()
-  ));
+  const d = new Date(
+    Date.UTC(
+      dateObjUTC.getUTCFullYear(),
+      dateObjUTC.getUTCMonth(),
+      dateObjUTC.getUTCDate()
+    )
+  );
   const dayNum = d.getUTCDay() || 7;
   d.setUTCDate(d.getUTCDate() + 4 - dayNum);
   const weekYear = d.getUTCFullYear();
   const yearStart = new Date(Date.UTC(weekYear, 0, 1));
-  const weekNum = Math.ceil(((d.getTime() - yearStart.getTime()) / 864e5 + 1) / 7);
+  const weekNum = Math.ceil(
+    ((d.getTime() - yearStart.getTime()) / 864e5 + 1) / 7
+  );
   return {
     weekLabel: `W${weekNum}`,
     weekYear
@@ -186561,7 +186611,10 @@ var uploadMonthlyPlan = async (req, res) => {
       const splitWeeksForPart = /* @__PURE__ */ new Set();
       for (const [weekKey, weekData] of weeklyData.entries()) {
         const { weekLabel, weekYear, entries } = weekData;
-        const totalUploadedCapacity = entries.reduce((sum, entry) => sum + entry.planned, 0);
+        const totalUploadedCapacity = entries.reduce(
+          (sum, entry) => sum + entry.planned,
+          0
+        );
         const headerDaysInWeek = headerDaysPerWeek.get(weekKey) ?? 0;
         const isSplitWeek = headerDaysInWeek < 7;
         if (totalUploadedCapacity === 0 && !isSplitWeek) {
@@ -186580,7 +186633,10 @@ var uploadMonthlyPlan = async (req, res) => {
             });
             if (plan) {
               const existingEntriesMap = new Map(
-                (plan.dailyEntries ?? []).map((entry) => [entry.date, toPlainDailyEntry(entry)])
+                (plan.dailyEntries ?? []).map((entry) => [
+                  entry.date,
+                  toPlainDailyEntry(entry)
+                ])
               );
               for (const newEntry of entries) {
                 if (existingEntriesMap.has(newEntry.date)) {
@@ -186591,14 +186647,16 @@ var uploadMonthlyPlan = async (req, res) => {
                   existingEntriesMap.set(newEntry.date, newEntry);
                 }
               }
-              const mergedEntries = Array.from(existingEntriesMap.values()).sort(
-                (a, b) => String(a.date).localeCompare(String(b.date))
-              );
+              const mergedEntries = Array.from(
+                existingEntriesMap.values()
+              ).sort((a, b) => String(a.date).localeCompare(String(b.date)));
               const newCapacity = mergedEntries.reduce(
                 (sum, entry) => sum + (entry.planned || 0),
                 0
               );
-              const activeDays = mergedEntries.filter((entry) => entry.planned > 0).length;
+              const activeDays = mergedEntries.filter(
+                (entry) => entry.planned > 0
+              ).length;
               plan.dailyEntries = mergedEntries;
               plan.capacity = newCapacity;
               plan.workingDays = Math.max(activeDays, 1);
@@ -186608,10 +186666,16 @@ var uploadMonthlyPlan = async (req, res) => {
               }
               plan.updatedBy = req.user?._id;
               await plan.save();
-              await syncDailyEntriesToCollection(plan, plan.dailyEntries, req.user?._id);
+              await syncDailyEntriesToCollection(
+                plan,
+                plan.dailyEntries,
+                req.user?._id
+              );
               updatedCount += 1;
             } else {
-              const activeDays = entries.filter((entry) => entry.planned > 0).length;
+              const activeDays = entries.filter(
+                (entry) => entry.planned > 0
+              ).length;
               const workingDays = Math.max(activeDays, 1);
               const newPlan = await productionPlan_model_default.create({
                 week: weekLabel,
@@ -186628,7 +186692,11 @@ var uploadMonthlyPlan = async (req, res) => {
                 dailyEntries: entries,
                 createdBy: req.user?._id
               });
-              await syncDailyEntriesToCollection(newPlan, newPlan.dailyEntries, req.user?._id);
+              await syncDailyEntriesToCollection(
+                newPlan,
+                newPlan.dailyEntries,
+                req.user?._id
+              );
               createdCount += 1;
             }
           } catch (error) {
@@ -186650,7 +186718,9 @@ var uploadMonthlyPlan = async (req, res) => {
     }
     const allSplitWeeks = Array.from(
       new Set(processed.flatMap((item) => item.splitWeeks))
-    ).sort((a, b) => Number.parseInt(a.slice(1), 10) - Number.parseInt(b.slice(1), 10));
+    ).sort(
+      (a, b) => Number.parseInt(a.slice(1), 10) - Number.parseInt(b.slice(1), 10)
+    );
     return res.status(201).json({
       success: true,
       message: `Import complete. Created: ${createdCount}, Updated: ${updatedCount}.`,
@@ -187260,6 +187330,7 @@ app2.use((err, req, res, next) => {
     success: false,
     message: err.message || "Internal server error"
   });
+  ``;
 });
 var PORT = Number(process.env.PORT || 5001);
 var NETWORK_IP = (process.env.NETWORK_IP || "127.0.0.1").trim();

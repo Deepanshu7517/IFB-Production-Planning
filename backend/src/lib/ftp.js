@@ -33,6 +33,37 @@ const getFtpConfig = () => ({
 });
 let ftpInstance = null;
 
+// export function startFtpServer() {
+//   if (ftpInstance) {
+//     console.log("⚠️ FTP already running");
+//     return ftpInstance;
+//   }
+
+//   const { port, user, pass } = getFtpConfig();
+
+//   const ftpServer = new FtpSrv({
+//     url: `ftp://0.0.0.0:${port}`,
+//     anonymous: false,
+//     pasv_min: 1024,
+//     pasv_max: 1048,
+//     pasv_url: process.env.FTP_HOST || "192.168.1.51",
+//   });
+
+//   ftpServer.on('login', ({ username, password }, resolve, reject) => {
+//     if (username === user && password === pass) {
+//       resolve({ root: STORAGE_PATH });
+//     } else {
+//       reject(new Error('Invalid FTP credentials'));
+//     }
+//   });
+
+//   ftpServer.listen()
+//     .then(() => console.log(`🚀 FTP Server running on port ${port}`))
+//     .catch(err => console.error('FTP Server error:', err.message));
+
+//   ftpInstance = ftpServer;
+//   return ftpServer;
+// }
 export function startFtpServer() {
   if (ftpInstance) {
     console.log("⚠️ FTP already running");
@@ -46,7 +77,17 @@ export function startFtpServer() {
     anonymous: false,
     pasv_min: 1024,
     pasv_max: 1048,
-    pasv_url: process.env.FTP_HOST || "192.168.1.51",
+    // Ensure this matches the IP your client is connecting from
+    pasv_url: process.env.FTP_HOST || "127.0.0.1", 
+  });
+
+  // PREVENTS NODE.JS FROM CRASHING (Fixes "Aw Snap")
+  ftpServer.on('client-error', ({ context, error }) => {
+    console.error(`[FTP Client Error]: ${error.message}`);
+  });
+
+  ftpServer.on('server-error', ({ error }) => {
+    console.error(`[FTP Server Error]: ${error.message}`);
   });
 
   ftpServer.on('login', ({ username, password }, resolve, reject) => {
@@ -59,17 +100,32 @@ export function startFtpServer() {
 
   ftpServer.listen()
     .then(() => console.log(`🚀 FTP Server running on port ${port}`))
-    .catch(err => console.error('FTP Server error:', err.message));
+    .catch(err => console.error('FTP Server startup error:', err.message));
 
   ftpInstance = ftpServer;
   return ftpServer;
 }
-
+// export async function getFtpClient() {
+//   const { port, user, pass } = getFtpConfig();
+//   const client = new ftp.Client(30000);
+//   await client.access({
+//     host: '127.0.0.1',
+//     port,
+//     user,
+//     password: pass,
+//     secure: false,
+//   });
+//   return client;
+// }
 export async function getFtpClient() {
   const { port, user, pass } = getFtpConfig();
   const client = new ftp.Client(30000);
+  
+  // Use the same host logic as the server
+  const ftpHost = process.env.FTP_HOST || '127.0.0.1';
+
   await client.access({
-    host: '127.0.0.1',
+    host: ftpHost,
     port,
     user,
     password: pass,
@@ -77,16 +133,25 @@ export async function getFtpClient() {
   });
   return client;
 }
-
+// export async function uploadToFtp(localFilePath, remoteFileName) {
+//   const client = await getFtpClient();
+//   try {
+//     await client.uploadFrom(localFilePath, remoteFileName);
+//   } finally {
+//     client.close();
+//   }
+// }
 export async function uploadToFtp(localFilePath, remoteFileName) {
   const client = await getFtpClient();
   try {
     await client.uploadFrom(localFilePath, remoteFileName);
+  } catch (error) {
+    console.error(`[FTP] Failed to upload ${remoteFileName}:`, error.message);
+    throw error; // Re-throw so the HTTP route knows it failed
   } finally {
     client.close();
   }
 }
-
 export async function downloadFromFtp(remoteFileName, localFilePath) {
   const client = await getFtpClient();
   try {

@@ -245,6 +245,7 @@ import cors from 'cors';
 import path from 'path';
 import { startFtpServer } from './lib/ftp.js';
 import { startFolderWatcher, WATCH_FOLDER, getLatestProcessingResult } from './lib/folderWatcher.js';
+import { startSapAutomator } from './lib/sapAutomator.js'; 
 import authRoutes from './routes/auth.route.js';
 import groupRoutes from './routes/group.route.js';
 import masterRoutes from './routes/master.route.js';
@@ -252,12 +253,11 @@ import messageRoutes from './routes/message.route.js';
 import productionPlanRoutes from './routes/productionPlan.route.js';
 import productionAuthRoutes from './routes/productionAuth.route.js';
 import { connectDB, connectLocalhostDB } from './lib/db.js';
-
 const app = express();
 
 startFtpServer();
 startFolderWatcher();
-
+startSapAutomator()
 app.use(cors({
   origin: function (origin, callback) {
     callback(null, true);
@@ -302,6 +302,7 @@ if (process.env.FRONTEND_PATH) {
   frontendPath = path.join(path.dirname(process.execPath), 'public');
 } else {
   frontendPath = path.join(process.cwd(), 'public');
+    // frontendPath = path.join(process.cwd(), "..", "frontend", "dist");
 }
 
 console.log('Serving frontend from:', frontendPath);
@@ -316,7 +317,7 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({
     success: false,
     message: err.message || 'Internal server error',
-  });
+  });``
 });
 const PORT = Number(process.env.PORT || 5001);
 const NETWORK_IP = (process.env.NETWORK_IP || '127.0.0.1').trim();

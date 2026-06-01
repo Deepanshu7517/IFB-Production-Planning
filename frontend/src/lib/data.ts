@@ -27,10 +27,10 @@ export const navbarData = [
     path: "/masters",
     text: "masters",
   },
-  {
-    path: "/weekly-entry",
-    text: "Weekly Entry",
-  },
+  // {
+  //   path: "/weekly-entry",
+  //   text: "Weekly Entry",
+  // },
   {
     path: "/production-calendar",
     text: "Production Calendar",

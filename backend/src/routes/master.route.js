@@ -112,18 +112,19 @@ const buildBomSnapshotFromDoc = (b) => ({
 //   createdAt: matrixDoc?.createdAt ?? bomDoc.createdAt,
 //   updatedAt: matrixDoc?.updatedAt ?? bomDoc.updatedAt,
 // });
-const buildMatrixRow = (bomDoc, matrixDoc = null) => ({
-  _id: bomDoc._id,
-  matrixId: matrixDoc?._id ?? null,
-  bomId: bomDoc._id,
-  model: bomDoc.model,
-  bom: buildBomSnapshotFromDoc(bomDoc),
-  shift: matrixDoc?.shift || "A",
-  manpowerAvailability: matrixDoc?.manpowerAvailability ?? 0,
-  isAutoMapped: true,
-  createdAt: matrixDoc?.createdAt ?? bomDoc.createdAt,
-  updatedAt: matrixDoc?.updatedAt ?? bomDoc.updatedAt,
-});
+// const buildMatrixRow = (bomDoc, matrixDoc = null) => ({
+//   _id: bomDoc._id,
+//   matrixId: matrixDoc?._id ?? null,
+//   bomId: bomDoc._id,
+//   model: bomDoc.model,
+//   bom: buildBomSnapshotFromDoc(bomDoc),
+//   shift: matrixDoc?.shift || "A",
+//   manpowerAvailability: matrixDoc?.manpowerAvailability ?? 0,
+//   isAutoMapped: true,
+//   createdAt: matrixDoc?.createdAt ?? bomDoc.createdAt,
+//   updatedAt: matrixDoc?.updatedAt ?? bomDoc.updatedAt,
+// });
+
 // const getAutoMappedMatrixRows = async () => {
 //   const [bomDocs, matrixDocs] = await Promise.all([
 //     BOM.find({ "model.modelId": { $exists: true, $ne: "" } }).lean(),
@@ -140,6 +141,28 @@ const buildMatrixRow = (bomDoc, matrixDoc = null) => ({
 //     buildMatrixRow(bomDoc, matrixByPartNumber.get(bomDoc.partNumber)),
 //   );
 // };
+const buildMatrixRow = (bomDoc, matrixDoc = null) => {
+  // Safely handle legacy string data or new array data
+  let currentShifts = ["A"];
+  if (matrixDoc?.shift) {
+    currentShifts = Array.isArray(matrixDoc.shift)
+      ? matrixDoc.shift
+      : [matrixDoc.shift];
+  }
+
+  return {
+    _id: bomDoc._id,
+    matrixId: matrixDoc?._id ?? null,
+    bomId: bomDoc._id,
+    model: bomDoc.model,
+    bom: buildBomSnapshotFromDoc(bomDoc),
+    shift: currentShifts, // Now passing an array
+    manpowerAvailability: matrixDoc?.manpowerAvailability ?? 0,
+    isAutoMapped: true,
+    createdAt: matrixDoc?.createdAt ?? bomDoc.createdAt,
+    updatedAt: matrixDoc?.updatedAt ?? bomDoc.updatedAt,
+  };
+};
 const getAutoMappedMatrixRows = async () => {
   const bomDocs = await BOM.find({
     "model.modelId": { $exists: true, $ne: "" },
@@ -158,14 +181,16 @@ const getAutoMappedMatrixRows = async () => {
     const existingMatrix = await Matrix.findOne({
       "bom.partNumber": bomDoc.partNumber,
     }).lean();
-
     const matrixDoc = await Matrix.findOneAndUpdate(
       { "bom.partNumber": bomDoc.partNumber },
       {
         $set: {
           model: bomDoc.model,
           bom: buildBomSnapshotFromDoc(bomDoc),
-          shift: existingMatrix?.shift || "A",
+          shift:
+            existingMatrix?.shift && existingMatrix.shift.length > 0
+              ? existingMatrix.shift
+              : ["A"],
           manpowerAvailability: existingMatrix?.manpowerAvailability ?? 0,
         },
       },
@@ -175,6 +200,22 @@ const getAutoMappedMatrixRows = async () => {
         setDefaultsOnInsert: true,
       },
     ).lean();
+    // const matrixDoc = await Matrix.findOneAndUpdate(
+    //   { "bom.partNumber": bomDoc.partNumber },
+    //   {
+    //     $set: {
+    //       model: bomDoc.model,
+    //       bom: buildBomSnapshotFromDoc(bomDoc),
+    //       shift: existingMatrix?.shift || "A",
+    //       manpowerAvailability: existingMatrix?.manpowerAvailability ?? 0,
+    //     },
+    //   },
+    //   {
+    //     upsert: true,
+    //     new: true,
+    //     setDefaultsOnInsert: true,
+    //   },
+    // ).lean();
 
     rows.push(buildMatrixRow(bomDoc, matrixDoc));
   }
@@ -182,9 +223,13 @@ const getAutoMappedMatrixRows = async () => {
   return rows;
 };
 const upsertMatrixShift = async ({ bomPartNumber, shift }) => {
-  const selectedShift = shift || "A";
-  if (!["A", "B", "C"].includes(selectedShift)) {
-    const err = new Error("Shift must be A, B, or C");
+  // Ensure we are working with an array, default to ["A"]
+  const selectedShifts = Array.isArray(shift) ? shift : [shift || "A"];
+  
+  // Validate all items in the array
+  const valid = selectedShifts.every(s => ["A", "B", "C"].includes(s));
+  if (!valid || selectedShifts.length === 0) {
+    const err = new Error("Shifts must be an array containing A, B, or C, and cannot be empty.");
     err.statusCode = 400;
     throw err;
   }
@@ -198,9 +243,7 @@ const upsertMatrixShift = async ({ bomPartNumber, shift }) => {
   }
 
   if (!bomDoc.model?.modelId) {
-    const err = new Error(
-      `BOM "${bomPartNumber}" has no Model assigned yet. Edit the BOM first to set its Model.`,
-    );
+    const err = new Error(`BOM "${bomPartNumber}" has no Model assigned yet. Edit the BOM first to set its Model.`);
     err.statusCode = 400;
     throw err;
   }
@@ -211,8 +254,7 @@ const upsertMatrixShift = async ({ bomPartNumber, shift }) => {
       $set: {
         model: bomDoc.model,
         bom: buildBomSnapshotFromDoc(bomDoc),
-        // shift,
-        shift: selectedShift,
+        shift: selectedShifts, // Save the array
       },
     },
     { upsert: true, new: true, setDefaultsOnInsert: true },
@@ -220,6 +262,45 @@ const upsertMatrixShift = async ({ bomPartNumber, shift }) => {
 
   return buildMatrixRow(bomDoc, matrixDoc);
 };
+// const upsertMatrixShift = async ({ bomPartNumber, shift }) => {
+//   const selectedShift = shift || "A";
+//   if (!["A", "B", "C"].includes(selectedShift)) {
+//     const err = new Error("Shift must be A, B, or C");
+//     err.statusCode = 400;
+//     throw err;
+//   }
+
+//   const bomDoc = await BOM.findOne({ partNumber: bomPartNumber }).lean();
+
+//   if (!bomDoc) {
+//     const err = new Error(`BOM not found: ${bomPartNumber}`);
+//     err.statusCode = 400;
+//     throw err;
+//   }
+
+//   if (!bomDoc.model?.modelId) {
+//     const err = new Error(
+//       `BOM "${bomPartNumber}" has no Model assigned yet. Edit the BOM first to set its Model.`,
+//     );
+//     err.statusCode = 400;
+//     throw err;
+//   }
+
+//   const matrixDoc = await Matrix.findOneAndUpdate(
+//     { "bom.partNumber": bomPartNumber },
+//     {
+//       $set: {
+//         model: bomDoc.model,
+//         bom: buildBomSnapshotFromDoc(bomDoc),
+//         // shift,
+//         shift: selectedShift,
+//       },
+//     },
+//     { upsert: true, new: true, setDefaultsOnInsert: true },
+//   ).lean();
+
+//   return buildMatrixRow(bomDoc, matrixDoc);
+// };
 // =============================================================================
 // GET /api/masters/hierarchy
 // Returns the full Plant → AssemblyLine → Model → BOM tree in one call.

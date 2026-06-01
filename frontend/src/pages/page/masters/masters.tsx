@@ -457,15 +457,25 @@ const Masters: React.FC = () => {
             formData.assemblyLine?._id,
         };
       }
-
+      // Inside handleSave -> if (activeTab === "Matrix")
       if (activeTab === "Matrix") {
         body = {
-          // 👇 CHANGE IS HERE: Fallback to existing Part Number
           bomPartNumber: formData._bomPartNumber || formData.bom?.partNumber,
-          shift: formData.shift,
+          shift: Array.isArray(formData.shift)
+            ? formData.shift
+            : [formData.shift || "A"],
           manpowerAvailability: Number(formData.manpowerAvailability ?? 0),
         };
       }
+      // if (activeTab === "Matrix") {
+
+      //   body = {
+      //     // 👇 CHANGE IS HERE: Fallback to existing Part Number
+      //     bomPartNumber: formData._bomPartNumber || formData.bom?.partNumber,
+      //     shift: formData.shift,
+      //     manpowerAvailability: Number(formData.manpowerAvailability ?? 0),
+      //   };
+      // }
 
       if (activeTab === "Users") {
         const { _id, __v, createdAt, updatedAt, id, ...rest } = formData;
@@ -494,40 +504,83 @@ const Masters: React.FC = () => {
       fetchData();
     }
   };
+  // const handleMatrixShiftChange = async (
+  //   item: MasterItem,
+  //   shift: "A" | "B" | "C",
+  // ) => {
+  //   const partNumber = item.bom?.partNumber;
+  //   if (!partNumber) return;
+
+  //   const previousItems = items;
+
+  //   setSavingShiftFor(partNumber);
+
+  //   setItems((current) =>
+  //     current.map((row) =>
+  //       row.bom?.partNumber === partNumber ? { ...row, shift } : row,
+  //     ),
+  //   );
+
+  //   try {
+  //     // const res = await axios.patch(
+  //     //   `${API_URL}/matrix/${encodeURIComponent(partNumber)}/shift`,
+  //     //   { shift },
+  //     // );
+
+  //     // setItems((current) =>
+  //     //   current.map((row) =>
+  //     //     row.bom?.partNumber === partNumber
+  //     //       ? { ...row, ...res.data.data }
+  //     //       : row,
+  //     //   ),
+  //     // );
+  //     setItems((current) =>
+  //       current.map((row) =>
+  //         row.bom?.partNumber === partNumber ? { ...row, shift } : row,
+  //       ),
+  //     );
+  //   } catch (err: any) {
+  //     setItems(previousItems);
+  //     alert(err.response?.data?.message || err.message);
+  //   } finally {
+  //     setSavingShiftFor(null);
+  //   }
+  // };
   const handleMatrixShiftChange = async (
     item: MasterItem,
-    shift: "A" | "B" | "C",
+    toggledShift: "A" | "B" | "C",
   ) => {
     const partNumber = item.bom?.partNumber;
     if (!partNumber) return;
 
     const previousItems = items;
-
     setSavingShiftFor(partNumber);
+
+    // Safely ensure we are working with an array
+    const currentShifts: string[] = Array.isArray(item.shift)
+      ? item.shift
+      : [item.shift || "A"];
+
+    let newShifts: string[];
+    if (currentShifts.includes(toggledShift)) {
+      newShifts = currentShifts.filter((s) => s !== toggledShift);
+      // Optional: Prevent unchecking the last shift so at least one is always active
+      if (newShifts.length === 0) newShifts = ["A"];
+    } else {
+      newShifts = [...currentShifts, toggledShift];
+    }
 
     setItems((current) =>
       current.map((row) =>
-        row.bom?.partNumber === partNumber ? { ...row, shift } : row,
+        row.bom?.partNumber === partNumber ? { ...row, shift: newShifts } : row,
       ),
     );
 
     try {
-      // const res = await axios.patch(
-      //   `${API_URL}/matrix/${encodeURIComponent(partNumber)}/shift`,
-      //   { shift },
-      // );
-
-      // setItems((current) =>
-      //   current.map((row) =>
-      //     row.bom?.partNumber === partNumber
-      //       ? { ...row, ...res.data.data }
-      //       : row,
-      //   ),
-      // );
-      setItems((current) =>
-        current.map((row) =>
-          row.bom?.partNumber === partNumber ? { ...row, shift } : row,
-        ),
+      // Send the array to the backend
+      await axios.patch(
+        `${API_URL}/matrix/${encodeURIComponent(partNumber)}/shift`,
+        { shift: newShifts },
       );
     } catch (err: any) {
       setItems(previousItems);
@@ -920,7 +973,38 @@ const Masters: React.FC = () => {
                 Shift {item.shift}
               </span>
             </td> */}
+            {/* Find this block inside renderTableRow -> case "Matrix" */}
             <td>
+              <div className="flex items-center gap-4 min-w-56">
+                {(["A", "B", "C"] as const).map((s) => {
+                  // Ensure current shift data is read as an array
+                  const activeShifts = Array.isArray(item.shift) ? item.shift : [item.shift || "A"];
+                  return (
+                    <label
+                      key={s}
+                      className="flex items-center gap-2 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox" // Changed to checkbox
+                        name={`matrix-shift-${bom.partNumber || item._id}-${s}`}
+                        className="checkbox checkbox-primary checkbox-sm" // Updated DaisyUI class
+                        value={s}
+                        checked={activeShifts.includes(s)}
+                        disabled={savingShiftFor === bom.partNumber}
+                        onChange={() => handleMatrixShiftChange(item, s)}
+                      />
+                      <span className="text-sm font-medium">Shift {s}</span>
+                    </label>
+                  );
+                })}
+                <span className="inline-flex w-4 justify-center">
+                  {savingShiftFor === bom.partNumber && (
+                    <span className="loading loading-spinner loading-xs" />
+                  )}
+                </span>
+              </div>
+            </td>
+            {/* <td>
               <div className="flex items-center gap-4 min-w-56">
                 {(["A", "B", "C"] as const).map((s) => (
                   <label
@@ -940,17 +1024,17 @@ const Masters: React.FC = () => {
                     <span className="text-sm font-medium">Shift {s}</span>
                   </label>
                 ))}
-
-                {/* {savingShiftFor === bom.partNumber && (
-                  <span className="loading loading-spinner loading-xs" />
-                )} */}
                 <span className="inline-flex w-4 justify-center">
                   {savingShiftFor === bom.partNumber && (
                     <span className="loading loading-spinner loading-xs" />
                   )}
                 </span>
               </div>
-            </td>
+            </td> */}
+                  
+                                  {/* {savingShiftFor === bom.partNumber && (
+                                    <span className="loading loading-spinner loading-xs" />
+                                  )} */}
             {/* <td>{actions}</td> */}
           </>
         );
@@ -1304,7 +1388,48 @@ const Masters: React.FC = () => {
           )}
 
           {/* Step 2 — Shift */}
+          {/* Find this block inside renderModalForm -> if (activeTab === "Matrix") -> Step 2 */}
           <div className="form-control">
+            <label className="label">
+              <span className="label-text font-semibold">
+                Step 2 — Select Shift(s)
+              </span>
+            </label>
+            <div className="flex gap-6 mt-1">
+              {(["A", "B", "C"] as const).map((s) => {
+                const formShifts = Array.isArray(formData.shift) ? formData.shift : [formData.shift || "A"];
+                return (
+                  <label
+                    key={s}
+                    className="flex items-center gap-2 cursor-pointer"
+                  >
+                    <input
+                      type="checkbox" // Changed to checkbox
+                      name={`form-shift-${s}`}
+                      className="checkbox checkbox-primary" // Updated DaisyUI class
+                      value={s}
+                      checked={formShifts.includes(s)}
+                      onChange={(e) => {
+                        let newShifts;
+                        if (e.target.checked) {
+                          newShifts = [...formShifts, s];
+                        } else {
+                          newShifts = formShifts.filter((x) => x !== s);
+                        }
+                        setFormData({ ...formData, shift: newShifts });
+                      }}
+                    />
+                    <span className="text-lg font-medium">Shift {s}</span>
+                  </label>
+                );
+              })}
+            </div>
+            {/* Optional validation warning if no shift is selected */}
+            {Array.isArray(formData.shift) && formData.shift.length === 0 && (
+              <p className="text-xs text-error mt-2">⚠️ At least one shift must be selected.</p>
+            )}
+          </div>
+          {/* <div className="form-control">
             <label className="label">
               <span className="label-text font-semibold">
                 Step 2 — Select Shift
@@ -1329,7 +1454,7 @@ const Masters: React.FC = () => {
                 </label>
               ))}
             </div>
-          </div>
+          </div> */}
         </div>
       );
     }

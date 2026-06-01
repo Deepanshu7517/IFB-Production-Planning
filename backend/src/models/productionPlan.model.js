@@ -925,7 +925,7 @@ const productionPlanSchema = new mongoose.Schema(
       childPartList: [childPartSchema],
     },
 
-    shift: { type: String, enum: ['A', 'B', 'C'] },
+    shift: { type: [String], enum: ['A', 'B', 'C'] },
     status: {
       type: String,
       enum: ['PLANNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'],

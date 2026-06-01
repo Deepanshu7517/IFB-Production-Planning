@@ -3,7 +3,7 @@ import Navbar from "../components/site/Navbar";
 import Footer from "../components/site/Footer";
 import { NavLink } from "react-router";
 import { navbarData } from "../lib/data";
-import NotificationBell from "../components/ui/notificationbell";
+// import NotificationBell from "../components/ui/notificationbell";
 import { LogoutBtn } from "./auth/Logout";
 
 const AppLayout = ({ children }: { children: React.ReactElement }) => {
@@ -28,7 +28,7 @@ const AppLayout = ({ children }: { children: React.ReactElement }) => {
         </header>
 
         <main className="flex-grow bg-gray-100/60">
-          <NotificationBell />
+          {/* <NotificationBell /> */}
           {children}
         </main>
 

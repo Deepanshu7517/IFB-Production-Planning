@@ -466,39 +466,41 @@
 //   }
 // };
 
-
-
-import ProductionPlan from '../models/productionPlan.model.js';
-import { DailyEntry } from './dailyEntry.controller.js';
+import ProductionPlan from "../models/productionPlan.model.js";
+import { DailyEntry } from "./dailyEntry.controller.js";
 
 // =============================================================================
 // HELPERS
 // =============================================================================
 const toLocalDateString = (date) => {
   const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
 };
 
 const parseLocalDateString = (dateStr) => {
-  const [y, m, d] = dateStr.split('-').map(Number);
+  const [y, m, d] = dateStr.split("-").map(Number);
   return new Date(y, m - 1, d);
 };
 
 const getWeekdayShort = (dateStr) =>
-  parseLocalDateString(dateStr).toLocaleDateString('en-IN', { weekday: 'short' });
+  parseLocalDateString(dateStr).toLocaleDateString("en-IN", {
+    weekday: "short",
+  });
 
 /**
  * ISO week number from a Date object.
  * Uses the proper ISO 8601 algorithm (week starts Monday, first week has Thursday).
  */
 const getISOWeekNumber = (date) => {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const d = new Date(
+    Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()),
+  );
   const dayNum = d.getUTCDay() || 7; // Mon=1 … Sun=7
   d.setUTCDate(d.getUTCDate() + 4 - dayNum); // nearest Thursday
   const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+  return Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
 };
 
 /**
@@ -530,15 +532,15 @@ const getMondayOfISOWeek = (weekNum, year) => {
  * Dates are built in local time so they always match the dates stored in dailyEntries.
  */
 const getWeekBounds = (weekLabel, year) => {
-  const weekNum = parseInt(weekLabel.replace('W', ''));
+  const weekNum = parseInt(weekLabel.replace("W", ""));
   const monday = getMondayOfISOWeek(weekNum, year);
   const sunday = new Date(monday);
   sunday.setDate(monday.getDate() + 6);
   // Use local date parts — avoids UTC shift turning Mar 9 into Mar 8
   const toLocalStr = (d) => {
     const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
     return `${y}-${m}-${day}`;
   };
   return { mondayStr: toLocalStr(monday), sundayStr: toLocalStr(sunday) };
@@ -574,9 +576,10 @@ export const getDashboardData = async (req, res) => {
     // ── Build Mongo query ────────────────────────────────────────────────────
     // Schema paths from productionPlan.model.js (NEW schema — nested under model.assemblyLine)
     const query = { year: targetYear, week: targetWeek };
-    if (plantId) query['model.assemblyLine.plant.plantId'] = plantId;
-    if (assemblyLineId) query['model.assemblyLine.assemblyLineId'] = assemblyLineId;
-    if (modelId) query['model.modelId'] = modelId;
+    if (plantId) query["model.assemblyLine.plant.plantId"] = plantId;
+    if (assemblyLineId)
+      query["model.assemblyLine.assemblyLineId"] = assemblyLineId;
+    if (modelId) query["model.modelId"] = modelId;
 
     const plans = await ProductionPlan.find(query).lean();
 
@@ -587,7 +590,13 @@ export const getDashboardData = async (req, res) => {
         data: {
           week: targetWeek,
           year: targetYear,
-          summary: { totalPlanned: 0, totalActual: 0, adherence: 0, deficit: 0, totalCapacity: 0 },
+          summary: {
+            totalPlanned: 0,
+            totalActual: 0,
+            adherence: 0,
+            deficit: 0,
+            totalCapacity: 0,
+          },
           chartData: [],
           planBreakdown: [],
         },
@@ -595,7 +604,7 @@ export const getDashboardData = async (req, res) => {
     }
 
     // ── Fetch all DailyEntry actuals for these plans in one query ────────────
-    const planIds = plans.map(p => p._id);
+    const planIds = plans.map((p) => p._id);
     const { mondayStr, sundayStr } = getWeekBounds(targetWeek, targetYear);
 
     const dailyEntries = await DailyEntry.find({
@@ -632,23 +641,39 @@ export const getDashboardData = async (req, res) => {
             actual: null,
             hasActual: false,
             // Collect shift values and notes across all plans for this date
-            shifts: [],   // e.g. ['day', 'night'] when multiple plans run
-            notes: [],   // non-empty notes per plan-day
+            shifts: [], // e.g. ['day', 'night'] when multiple plans run
+            notes: [], // non-empty notes per plan-day
           });
         }
 
         const d = dayMap.get(entry.date);
         d.basePlanned += entry.planned;
 
+        // if (actualVal !== null) {
+        //   d.actual = (d.actual ?? 0) + actualVal;
+        //   d.hasActual = true;
+        // }
+
+        // // Collect shift from DailyEntry (authoritative) or fall back to plan-level shift
+        // const shift = saved?.shift ?? plan.shift ?? null;
+        // if (shift && !d.shifts.includes(shift)) d.shifts.push(shift);
         if (actualVal !== null) {
           d.actual = (d.actual ?? 0) + actualVal;
           d.hasActual = true;
         }
 
-        // Collect shift from DailyEntry (authoritative) or fall back to plan-level shift
-        const shift = saved?.shift ?? plan.shift ?? null;
-        if (shift && !d.shifts.includes(shift)) d.shifts.push(shift);
+        // ✅ Safely collect array of shifts
+        const rawShift = saved?.shift ?? plan.shift ?? null;
+        const shiftArray = Array.isArray(rawShift)
+          ? rawShift
+          : rawShift
+            ? [rawShift]
+            : [];
+        for (const s of shiftArray) {
+          if (s && !d.shifts.includes(s)) d.shifts.push(s);
+        }
 
+        // Collect non-empty notes from DailyEntry
         // Collect non-empty notes from DailyEntry
         const note = saved?.notes?.trim();
         if (note) d.notes.push(note);
@@ -656,10 +681,12 @@ export const getDashboardData = async (req, res) => {
     }
 
     // ── Sort days, compute rolling backlog ────────────────────────────────────
-    const sortedDays = Array.from(dayMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+    const sortedDays = Array.from(dayMap.values()).sort((a, b) =>
+      a.date.localeCompare(b.date),
+    );
 
     let cumulativeBacklog = 0;
-    const chartData = sortedDays.map(day => {
+    const chartData = sortedDays.map((day) => {
       const adjustedPlanned = day.hasActual
         ? day.basePlanned
         : Math.max(day.basePlanned + cumulativeBacklog, 0);
@@ -670,12 +697,13 @@ export const getDashboardData = async (req, res) => {
         cumulativeBacklog += dayBacklog;
       }
 
-      let performanceStatus = 'pending';
+      let performanceStatus = "pending";
       if (day.hasActual) {
         const actual = day.actual ?? 0;
-        if (actual >= adjustedPlanned) performanceStatus = 'ahead';
-        else if (actual >= adjustedPlanned * 0.9) performanceStatus = 'on-track';
-        else performanceStatus = 'behind';
+        if (actual >= adjustedPlanned) performanceStatus = "ahead";
+        else if (actual >= adjustedPlanned * 0.9)
+          performanceStatus = "on-track";
+        else performanceStatus = "behind";
       }
 
       return {
@@ -692,28 +720,32 @@ export const getDashboardData = async (req, res) => {
         // ── NEW: per-day shift & notes from DailyEntry ───────────────────────
         // shift: collapsed to a single string when all plans agree, or
         //        'mixed' when different shifts are running on the same date.
-        shift: day.shifts.length === 0 ? null
-          : day.shifts.length === 1 ? day.shifts[0]
-            : 'mixed',
-        shifts: day.shifts,                // raw list for tooltip detail
-        notes: day.notes.join(' | '),     // combined notes string (empty = '')
-        notesList: day.notes,              // raw array if frontend needs it
+        shift:
+          day.shifts.length === 0
+            ? null
+            : day.shifts.length === 1
+              ? day.shifts[0]
+              : "mixed",
+        shifts: day.shifts, // raw list for tooltip detail
+        notes: day.notes.join(" | "), // combined notes string (empty = '')
+        notesList: day.notes, // raw array if frontend needs it
       };
     });
 
     // ── Summary stats ─────────────────────────────────────────────────────────
-    const enteredDays = chartData.filter(d => d.hasActual);
+    const enteredDays = chartData.filter((d) => d.hasActual);
     const totalActual = enteredDays.reduce((s, d) => s + d.actual, 0);
     const totalPlanned = enteredDays.reduce((s, d) => s + d.basePlanned, 0);
     const totalCapacity = plans.reduce((s, p) => s + (p.capacity ?? 0), 0);
-    const adherence = totalPlanned > 0
-      ? parseFloat(((totalActual / totalPlanned) * 100).toFixed(1))
-      : 0;
+    const adherence =
+      totalPlanned > 0
+        ? parseFloat(((totalActual / totalPlanned) * 100).toFixed(1))
+        : 0;
 
     // ── NEW: status breakdown ─────────────────────────────────────────────────
     // Count how many plans are in each status for this week/filter.
     const statusBreakdown = plans.reduce((acc, p) => {
-      const s = p.status ?? 'PLANNED';
+      const s = p.status ?? "PLANNED";
       acc[s] = (acc[s] ?? 0) + 1;
       return acc;
     }, {});
@@ -726,23 +758,25 @@ export const getDashboardData = async (req, res) => {
     };
 
     // ── Per-plan breakdown ────────────────────────────────────────────────────
-    const planBreakdown = plans.map(p => {
-      const planEntries = (p.dailyEntries ?? []).map(e => {
+    const planBreakdown = plans.map((p) => {
+      const planEntries = (p.dailyEntries ?? []).map((e) => {
         const saved = entryMap.get(`${p._id}_${e.date}`);
         return {
           ...e,
           actual: saved?.actual ?? null,
           shift: saved?.shift ?? p.shift ?? null,
-          notes: saved?.notes ?? '',
+          notes: saved?.notes ?? "",
         };
       });
-      const entered = planEntries.filter(e => e.actual !== null);
+      const entered = planEntries.filter((e) => e.actual !== null);
       const planActual = entered.reduce((s, e) => s + (e.actual ?? 0), 0);
       const planPlanned = entered.reduce((s, e) => s + e.planned, 0);
 
       // Day-level performance counts for this plan
-      const aheadDays = entered.filter(e => e.actual >= e.planned).length;
-      const behindDays = entered.filter(e => e.actual < e.planned * 0.9).length;
+      const aheadDays = entered.filter((e) => e.actual >= e.planned).length;
+      const behindDays = entered.filter(
+        (e) => e.actual < e.planned * 0.9,
+      ).length;
       const onTrackDays = entered.length - aheadDays - behindDays;
 
       return {
@@ -751,23 +785,24 @@ export const getDashboardData = async (req, res) => {
         year: p.year,
         status: p.status,
         isPartialWeek: p.isPartialWeek ?? false,
-        notes: p.notes ?? '',
-        plant: p.model?.assemblyLine?.plant?.plantName ?? '—',
-        plantId: p.model?.assemblyLine?.plant?.plantId ?? '—',
-        assemblyLine: p.model?.assemblyLine?.assemblyLineName ?? '—',
-        assemblyLineId: p.model?.assemblyLine?.assemblyLineId ?? '—',
-        model: p.model?.modelName ?? '—',
-        modelId: p.model?.modelId ?? '—',
-        partNumber: p.bom?.partNumber ?? '—',
-        partName: p.bom?.partName ?? '—',
+        notes: p.notes ?? "",
+        plant: p.model?.assemblyLine?.plant?.plantName ?? "—",
+        plantId: p.model?.assemblyLine?.plant?.plantId ?? "—",
+        assemblyLine: p.model?.assemblyLine?.assemblyLineName ?? "—",
+        assemblyLineId: p.model?.assemblyLine?.assemblyLineId ?? "—",
+        model: p.model?.modelName ?? "—",
+        modelId: p.model?.modelId ?? "—",
+        partNumber: p.bom?.partNumber ?? "—",
+        partName: p.bom?.partName ?? "—",
         capacity: p.capacity,
         workingDays: p.workingDays,
         totalActual: planActual,
         totalPlanned: planPlanned,
-        adherence: planPlanned > 0 ? Math.round((planActual / planPlanned) * 100) : 0,
+        adherence:
+          planPlanned > 0 ? Math.round((planActual / planPlanned) * 100) : 0,
         deficit: Math.max(0, planPlanned - planActual),
         daysEntered: entered.length,
-        daysRemaining: planEntries.filter(e => e.actual === null).length,
+        daysRemaining: planEntries.filter((e) => e.actual === null).length,
         // Day-level counts
         aheadDays,
         onTrackDays,
@@ -795,7 +830,10 @@ export const getDashboardData = async (req, res) => {
         planned: totalPlan,
         actual: totalAct,
         backlog: totalBacklog,
-        adherence: totalPlan > 0 ? parseFloat(((totalAct / totalPlan) * 100).toFixed(1)) : 0,
+        adherence:
+          totalPlan > 0
+            ? parseFloat(((totalAct / totalPlan) * 100).toFixed(1))
+            : 0,
         plansCount: items.length,
       };
     };
@@ -813,7 +851,7 @@ export const getDashboardData = async (req, res) => {
       plantMap.get(p.plantId).plans.push(p);
     }
 
-    const hierarchyData = Array.from(plantMap.values()).map(plant => {
+    const hierarchyData = Array.from(plantMap.values()).map((plant) => {
       // Group this plant's plans by assembly line
       const lineMap = new Map();
       for (const p of plant.plans) {
@@ -827,7 +865,7 @@ export const getDashboardData = async (req, res) => {
         lineMap.get(p.assemblyLineId).plans.push(p);
       }
 
-      const assemblyLines = Array.from(lineMap.values()).map(line => {
+      const assemblyLines = Array.from(lineMap.values()).map((line) => {
         // Group this line's plans by model
         const modelMap = new Map();
         for (const p of line.plans) {
@@ -841,12 +879,12 @@ export const getDashboardData = async (req, res) => {
           modelMap.get(p.modelId).plans.push(p);
         }
 
-        const models = Array.from(modelMap.values()).map(mdl => ({
+        const models = Array.from(modelMap.values()).map((mdl) => ({
           modelId: mdl.modelId,
           modelName: mdl.modelName,
           stats: aggregateStats(mdl.plans),
           // Leaf plans (without heavy dailyEntries array to keep response lean)
-          plans: mdl.plans.map(p => ({
+          plans: mdl.plans.map((p) => ({
             planId: p.planId,
             status: p.status,
             partNumber: p.partNumber,
@@ -894,12 +932,18 @@ export const getDashboardData = async (req, res) => {
           totalCapacity,
           plansCount: plans.length,
           daysEntered: enteredDays.length,
-          daysRemaining: chartData.filter(d => !d.hasActual).length,
+          daysRemaining: chartData.filter((d) => !d.hasActual).length,
           statusCounts,
-          aheadDays: chartData.filter(d => d.performanceStatus === 'ahead').length,
-          onTrackDays: chartData.filter(d => d.performanceStatus === 'on-track').length,
-          behindDays: chartData.filter(d => d.performanceStatus === 'behind').length,
-          pendingDays: chartData.filter(d => d.performanceStatus === 'pending').length,
+          aheadDays: chartData.filter((d) => d.performanceStatus === "ahead")
+            .length,
+          onTrackDays: chartData.filter(
+            (d) => d.performanceStatus === "on-track",
+          ).length,
+          behindDays: chartData.filter((d) => d.performanceStatus === "behind")
+            .length,
+          pendingDays: chartData.filter(
+            (d) => d.performanceStatus === "pending",
+          ).length,
         },
         chartData,
         planBreakdown,
@@ -911,7 +955,7 @@ export const getDashboardData = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('getDashboardData error:', error);
+    console.error("getDashboardData error:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -981,55 +1025,62 @@ export const getDashboardData = async (req, res) => {
 // };
 export const getDashboardFilters = async (req, res) => {
   try {
-    const year = req.query.year ? parseInt(req.query.year, 10) : new Date().getFullYear();
+    const year = req.query.year
+      ? parseInt(req.query.year, 10)
+      : new Date().getFullYear();
 
     const [plants, assemblyLines, models, rawWeeks] = await Promise.all([
       ProductionPlan.aggregate([
         { $match: { year } },
         {
           $group: {
-            _id: '$model.assemblyLine.plant.plantId',
-            plantName: { $first: '$model.assemblyLine.plant.plantName' },
+            _id: "$model.assemblyLine.plant.plantId",
+            plantName: { $first: "$model.assemblyLine.plant.plantName" },
           },
         },
-        { $project: { _id: 0, plantId: '$_id', plantName: 1 } },
+        { $project: { _id: 0, plantId: "$_id", plantName: 1 } },
         { $sort: { plantName: 1 } },
       ]),
       ProductionPlan.aggregate([
         { $match: { year } },
         {
           $group: {
-            _id: '$model.assemblyLine.assemblyLineId',
-            assemblyLineName: { $first: '$model.assemblyLine.assemblyLineName' },
+            _id: "$model.assemblyLine.assemblyLineId",
+            assemblyLineName: {
+              $first: "$model.assemblyLine.assemblyLineName",
+            },
           },
         },
-        { $project: { _id: 0, assemblyLineId: '$_id', assemblyLineName: 1 } },
+        { $project: { _id: 0, assemblyLineId: "$_id", assemblyLineName: 1 } },
         { $sort: { assemblyLineName: 1 } },
       ]),
       ProductionPlan.aggregate([
         { $match: { year } },
         {
           $group: {
-            _id: '$model.modelId',
-            modelName: { $first: '$model.modelName' },
+            _id: "$model.modelId",
+            modelName: { $first: "$model.modelName" },
           },
         },
-        { $project: { _id: 0, modelId: '$_id', modelName: 1 } },
+        { $project: { _id: 0, modelId: "$_id", modelName: 1 } },
         { $sort: { modelName: 1 } },
       ]),
-      ProductionPlan.distinct('week', { year }),
+      ProductionPlan.distinct("week", { year }),
     ]);
 
     const weeks = rawWeeks
       .filter(Boolean)
-      .sort((a, b) => parseInt(a.replace('W', ''), 10) - parseInt(b.replace('W', ''), 10));
+      .sort(
+        (a, b) =>
+          parseInt(a.replace("W", ""), 10) - parseInt(b.replace("W", ""), 10),
+      );
 
     res.status(200).json({
       success: true,
       data: { plants, assemblyLines, models, weeks },
     });
   } catch (error) {
-    console.error('getDashboardFilters error:', error);
+    console.error("getDashboardFilters error:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -1154,20 +1205,20 @@ export const getCalendarHeatMap = async (req, res) => {
       date: { $gte: firstStr, $lte: lastStr },
     };
 
-    if (plantId) match['plant.plantId'] = plantId;
-    if (modelId) match['model.modelId'] = modelId;
-    if (assemblyLineId) match['assemblyLine.assemblyLineId'] = assemblyLineId;
+    if (plantId) match["plant.plantId"] = plantId;
+    if (modelId) match["model.modelId"] = modelId;
+    if (assemblyLineId) match["assemblyLine.assemblyLineId"] = assemblyLineId;
 
     const aggregated = await DailyEntry.aggregate([
       { $match: match },
       {
         $group: {
-          _id: '$date',
-          planned: { $sum: { $ifNull: ['$planned', 0] } },
-          actual: { $sum: { $ifNull: ['$actual', 0] } },
+          _id: "$date",
+          planned: { $sum: { $ifNull: ["$planned", 0] } },
+          actual: { $sum: { $ifNull: ["$actual", 0] } },
           actualCount: {
             $sum: {
-              $cond: [{ $ne: ['$actual', null] }, 1, 0],
+              $cond: [{ $ne: ["$actual", null] }, 1, 0],
             },
           },
         },
@@ -1183,7 +1234,7 @@ export const getCalendarHeatMap = async (req, res) => {
           actual: row.actualCount > 0 ? row.actual : null,
           hasActual: row.actualCount > 0,
         },
-      ])
+      ]),
     );
 
     const calendar = [];
@@ -1197,13 +1248,13 @@ export const getCalendarHeatMap = async (req, res) => {
         hasActual: false,
       };
 
-      let status = 'normal';
+      let status = "normal";
       if (agg.planned > 0 && agg.hasActual) {
-        if (agg.actual >= agg.planned) status = 'ahead';
-        else if (agg.actual >= agg.planned * 0.9) status = 'on-track';
-        else status = 'behind';
+        if (agg.actual >= agg.planned) status = "ahead";
+        else if (agg.actual >= agg.planned * 0.9) status = "on-track";
+        else status = "behind";
       } else if (agg.planned > 0) {
-        status = 'pending';
+        status = "pending";
       }
 
       calendar.push({
@@ -1226,7 +1277,7 @@ export const getCalendarHeatMap = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('getCalendarHeatMap error:', error);
+    console.error("getCalendarHeatMap error:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };

@@ -1524,350 +1524,589 @@ const toPlainDailyEntry = (entry) => {
   return typeof entry.toObject === "function" ? entry.toObject() : { ...entry };
 };
 
-export const uploadMonthlyPlan = async (req, res) => {
-  const tempInput = path.join(
-    TEMP_PATH,
-    `monthly_${Date.now()}_${Math.random().toString(36).slice(2)}.xlsx`,
-  );
+// export const uploadMonthlyPlan = async (req, res) => {
+//   const tempInput = path.join(
+//     TEMP_PATH,
+//     `monthly_${Date.now()}_${Math.random().toString(36).slice(2)}.xlsx`,
+//   );
 
-  try {
-    if (!req.file) {
-      return res
-        .status(400)
-        .json({ success: false, message: "No file uploaded" });
+//   try {
+//     if (!req.file) {
+//       return res
+//         .status(400)
+//         .json({ success: false, message: "No file uploaded" });
+//     }
+
+//     const parsedYear = req.body.year
+//       ? Number.parseInt(req.body.year, 10)
+//       : new Date().getFullYear();
+
+//     if (!Number.isInteger(parsedYear)) {
+//       return res
+//         .status(400)
+//         .json({ success: false, message: "Invalid year value" });
+//     }
+
+//     let manpower = {};
+//     if (req.body.manpower) {
+//       try {
+//         manpower =
+//           typeof req.body.manpower === "string"
+//             ? JSON.parse(req.body.manpower)
+//             : req.body.manpower;
+//       } catch {
+//         return res.status(400).json({
+//           success: false,
+//           message: "Invalid manpower JSON format",
+//         });
+//       }
+//     }
+
+//     fs.writeFileSync(tempInput, req.file.buffer);
+
+//     const ftpFileName = `monthly_plan_${parsedYear}_${Date.now()}.xlsx`;
+//     await uploadToFtp(tempInput, ftpFileName);
+//     console.log(`[FTP] Monthly plan saved: ${ftpFileName}`);
+
+//     const workbook = xlsx.read(req.file.buffer, {
+//       type: "buffer",
+//       cellDates: false,
+//     });
+
+//     const sheetName = workbook.SheetNames?.[0];
+//     if (!sheetName) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "No worksheet found in the uploaded file.",
+//       });
+//     }
+
+//     const sheet = workbook.Sheets[sheetName];
+//     if (!sheet) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Unable to read the first worksheet.",
+//       });
+//     }
+
+//     const rawRows = xlsx.utils.sheet_to_json(sheet, {
+//       header: 1,
+//       defval: "",
+//       raw: true,
+//     });
+
+//     if (rawRows.length < 2) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "File is empty or missing data rows.",
+//       });
+//     }
+
+//     const sheetRange = sheet["!ref"]
+//       ? xlsx.utils.decode_range(sheet["!ref"])
+//       : null;
+//     if (!sheetRange) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Sheet has no readable range.",
+//       });
+//     }
+
+//     const date1904 = Boolean(workbook.Workbook?.WBProps?.date1904);
+//     const dateCols = [];
+//     const headerDaysPerWeek = new Map();
+
+//     for (let c = 3; c <= sheetRange.e.c; c += 1) {
+//       const cellAddress = xlsx.utils.encode_cell({ r: 0, c });
+//       const parsedDate = parseHeaderDateCell(sheet[cellAddress], date1904);
+//       if (!parsedDate) continue;
+
+//       const { y, m, d } = parsedDate;
+//       const isoDateString = `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+//       const utcDate = new Date(Date.UTC(y, m, d));
+//       const { weekLabel, weekYear } = getCustomWeekInfo(utcDate);
+
+//       dateCols.push({
+//         colIndex: c,
+//         dateStr: isoDateString,
+//         weekLabel,
+//         weekYear,
+//       });
+//     }
+
+//     if (dateCols.length === 0) {
+//       return res.status(400).json({
+//         success: false,
+//         message:
+//           "No valid date columns found. Expected date values in the header row starting from Column D.",
+//       });
+//     }
+
+//     const allMatrices = await Matrix.find({}).lean();
+//     const matrixMap = new Map();
+
+//     for (const mx of allMatrices) {
+//       const partNo = String(mx.bom?.partNumber ?? "").trim();
+//       if (!partNo) continue;
+
+//       if (!matrixMap.has(partNo)) {
+//         matrixMap.set(partNo, []);
+//       }
+
+//       matrixMap.get(partNo).push(mx);
+//     }
+
+//     let createdCount = 0;
+//     let updatedCount = 0;
+//     let skippedCount = 0;
+
+//     const errors = [];
+//     const notFound = [];
+//     const processed = [];
+
+//     for (let r = 1; r < rawRows.length; r += 1) {
+//       const row = rawRows[r];
+//       if (!row || row.every((cell) => cell === "" || cell == null)) continue;
+
+//       const partNumber = String(row[1] ?? "").trim();
+//       const partName = String(row[2] ?? "").trim();
+
+//       if (!partNumber) continue;
+
+//       const matchedMatrices = matrixMap.get(partNumber);
+//       if (!matchedMatrices || matchedMatrices.length === 0) {
+//         notFound.push({ partNumber, partName });
+//         continue;
+//       }
+
+//       const weeklyData = new Map();
+
+//       for (const col of dateCols) {
+//         const rawQty = row[col.colIndex];
+//         const qty =
+//           rawQty === "" || rawQty == null
+//             ? 0
+//             : Number.parseFloat(String(rawQty).replace(/,/g, "")) || 0;
+
+//         if (qty <= 0) continue;
+
+//         const weekKey = `${col.weekLabel}-${col.weekYear}`;
+
+//         if (!weeklyData.has(weekKey)) {
+//           weeklyData.set(weekKey, {
+//             weekLabel: col.weekLabel,
+//             weekYear: col.weekYear,
+//             entries: [],
+//           });
+//         }
+
+//         weeklyData.get(weekKey).entries.push({
+//           date: col.dateStr,
+//           planned: qty,
+//           actual: null,
+//           notes: "",
+//           shift: "day",
+//         });
+//       }
+
+//       const weeksProcessedForPart = new Set();
+//       const splitWeeksForPart = new Set();
+
+//       for (const [weekKey, weekData] of weeklyData.entries()) {
+//         const { weekLabel, weekYear, entries } = weekData;
+
+//         const totalUploadedCapacity = entries.reduce(
+//           (sum, entry) => sum + entry.planned,
+//           0,
+//         );
+//         const headerDaysInWeek = headerDaysPerWeek.get(weekKey) ?? 0;
+//         const isSplitWeek = headerDaysInWeek < 7;
+
+//         if (totalUploadedCapacity === 0 && !isSplitWeek) {
+//           skippedCount += 1;
+//           continue;
+//         }
+
+//         if (isSplitWeek) splitWeeksForPart.add(weekLabel);
+//         weeksProcessedForPart.add(weekLabel);
+
+//         const weekManpowerVal = manpower[weekLabel] ?? null;
+
+//         for (const matrix of matchedMatrices) {
+//           try {
+//             let plan = await ProductionPlan.findOne({
+//               matrixRef: matrix._id,
+//               week: weekLabel,
+//               year: weekYear,
+//             });
+
+//             if (plan) {
+//               const existingEntriesMap = new Map(
+//                 (plan.dailyEntries ?? []).map((entry) => [
+//                   entry.date,
+//                   toPlainDailyEntry(entry),
+//                 ]),
+//               );
+
+//               for (const newEntry of entries) {
+//                 if (existingEntriesMap.has(newEntry.date)) {
+//                   const existing = existingEntriesMap.get(newEntry.date);
+//                   existing.planned = newEntry.planned;
+//                   existingEntriesMap.set(newEntry.date, existing);
+//                 } else {
+//                   existingEntriesMap.set(newEntry.date, newEntry);
+//                 }
+//               }
+
+//               const mergedEntries = Array.from(
+//                 existingEntriesMap.values(),
+//               ).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+
+//               const newCapacity = mergedEntries.reduce(
+//                 (sum, entry) => sum + (entry.planned || 0),
+//                 0,
+//               );
+//               const activeDays = mergedEntries.filter(
+//                 (entry) => entry.planned > 0,
+//               ).length;
+
+//               plan.dailyEntries = mergedEntries;
+//               plan.capacity = newCapacity;
+//               plan.workingDays = Math.max(activeDays, 1);
+//               plan.isPartialWeek = isSplitWeek;
+
+//               if (weekManpowerVal !== null) {
+//                 plan.notes = `Manpower: ${weekManpowerVal}`;
+//               }
+
+//               plan.updatedBy = req.user?._id;
+
+//               await plan.save();
+//               await syncDailyEntriesToCollection(
+//                 plan,
+//                 plan.dailyEntries,
+//                 req.user?._id,
+//               );
+
+//               updatedCount += 1;
+//             } else {
+//               const activeDays = entries.filter(
+//                 (entry) => entry.planned > 0,
+//               ).length;
+//               const workingDays = Math.max(activeDays, 1);
+
+//               const newPlan = await ProductionPlan.create({
+//                 week: weekLabel,
+//                 year: weekYear,
+//                 workingDays,
+//                 capacity: totalUploadedCapacity,
+//                 isPartialWeek: isSplitWeek,
+//                 matrixRef: matrix._id,
+//                 model: matrix.model,
+//                 bom: matrix.bom,
+//                 shift: matrix.shift,
+//                 status: "PLANNED",
+//                 notes:
+//                   weekManpowerVal !== null
+//                     ? `Manpower: ${weekManpowerVal}`
+//                     : "",
+//                 dailyEntries: entries,
+//                 createdBy: req.user?._id,
+//               });
+
+//               await syncDailyEntriesToCollection(
+//                 newPlan,
+//                 newPlan.dailyEntries,
+//                 req.user?._id,
+//               );
+//               createdCount += 1;
+//             }
+//           } catch (error) {
+//             errors.push({
+//               partNumber,
+//               week: weekLabel,
+//               error: error.message,
+//             });
+//           }
+//         }
+//       }
+
+//       processed.push({
+//         partNumber,
+//         partName,
+//         matrixCount: matchedMatrices.length,
+//         weeks: Array.from(weeksProcessedForPart),
+//         splitWeeks: Array.from(splitWeeksForPart),
+//       });
+//     }
+
+//     const allSplitWeeks = Array.from(
+//       new Set(processed.flatMap((item) => item.splitWeeks)),
+//     ).sort(
+//       (a, b) =>
+//         Number.parseInt(a.slice(1), 10) - Number.parseInt(b.slice(1), 10),
+//     );
+
+//     return res.status(201).json({
+//       success: true,
+//       message: `Import complete. Created: ${createdCount}, Updated: ${updatedCount}.`,
+//       summary: {
+//         created: createdCount,
+//         updated: updatedCount,
+//         skipped: skippedCount,
+//         errors,
+//         processed,
+//         notFound,
+//         splitWeeks: allSplitWeeks,
+//         datesFound: dateCols.length,
+//         rowsInFile: rawRows.length - 1,
+//       },
+//     });
+//   } catch (err) {
+//     console.error("uploadMonthlyPlan Error:", err);
+//     return res.status(500).json({
+//       success: false,
+//       message: err.message || "Failed to upload monthly plan",
+//     });
+//   } finally {
+//     cleanupTemp(tempInput);
+//   }
+// };
+// =============================================================================
+// CORE EXCEL PROCESSING LOGIC (Decoupled for Automation & Manual Upload)
+// =============================================================================
+export const processMonthlyExcelBuffer = async (fileBuffer, parsedYear, manpower, userId) => {
+  const workbook = xlsx.read(fileBuffer, {
+    type: "buffer",
+    cellDates: false,
+  });
+
+  const sheetName = workbook.SheetNames?.[0];
+  if (!sheetName) throw new Error("No worksheet found in the file.");
+
+  const sheet = workbook.Sheets[sheetName];
+  if (!sheet) throw new Error("Unable to read the first worksheet.");
+
+  const rawRows = xlsx.utils.sheet_to_json(sheet, {
+    header: 1,
+    defval: "",
+    raw: true,
+  });
+
+  if (rawRows.length < 2) throw new Error("File is empty or missing data rows.");
+
+  const sheetRange = sheet["!ref"] ? xlsx.utils.decode_range(sheet["!ref"]) : null;
+  if (!sheetRange) throw new Error("Sheet has no readable range.");
+
+  const date1904 = Boolean(workbook.Workbook?.WBProps?.date1904);
+  const dateCols = [];
+  const headerDaysPerWeek = new Map();
+
+  for (let c = 3; c <= sheetRange.e.c; c += 1) {
+    const cellAddress = xlsx.utils.encode_cell({ r: 0, c });
+    const parsedDate = parseHeaderDateCell(sheet[cellAddress], date1904);
+    if (!parsedDate) continue;
+
+    const { y, m, d } = parsedDate;
+    const isoDateString = `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    const utcDate = new Date(Date.UTC(y, m, d));
+    const { weekLabel, weekYear } = getCustomWeekInfo(utcDate);
+
+    dateCols.push({ colIndex: c, dateStr: isoDateString, weekLabel, weekYear });
+  }
+
+  if (dateCols.length === 0) {
+    throw new Error("No valid date columns found starting from Column D.");
+  }
+
+  const allMatrices = await Matrix.find({}).lean();
+  const matrixMap = new Map();
+
+  for (const mx of allMatrices) {
+    const partNo = String(mx.bom?.partNumber ?? "").trim();
+    if (!partNo) continue;
+    if (!matrixMap.has(partNo)) matrixMap.set(partNo, []);
+    matrixMap.get(partNo).push(mx);
+  }
+
+  let createdCount = 0;
+  let updatedCount = 0;
+  let skippedCount = 0;
+
+  const errors = [];
+  const notFound = [];
+  const processed = [];
+
+  for (let r = 1; r < rawRows.length; r += 1) {
+    const row = rawRows[r];
+    if (!row || row.every((cell) => cell === "" || cell == null)) continue;
+
+    const partNumber = String(row[1] ?? "").trim();
+    const partName = String(row[2] ?? "").trim();
+    if (!partNumber) continue;
+
+    const matchedMatrices = matrixMap.get(partNumber);
+    if (!matchedMatrices || matchedMatrices.length === 0) {
+      notFound.push({ partNumber, partName });
+      continue;
     }
 
-    const parsedYear = req.body.year
-      ? Number.parseInt(req.body.year, 10)
-      : new Date().getFullYear();
+    const weeklyData = new Map();
 
-    if (!Number.isInteger(parsedYear)) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Invalid year value" });
-    }
+    for (const col of dateCols) {
+      const rawQty = row[col.colIndex];
+      const qty = rawQty === "" || rawQty == null ? 0 : Number.parseFloat(String(rawQty).replace(/,/g, "")) || 0;
+      if (qty <= 0) continue;
 
-    let manpower = {};
-    if (req.body.manpower) {
-      try {
-        manpower =
-          typeof req.body.manpower === "string"
-            ? JSON.parse(req.body.manpower)
-            : req.body.manpower;
-      } catch {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid manpower JSON format",
-        });
+      const weekKey = `${col.weekLabel}-${col.weekYear}`;
+      if (!weeklyData.has(weekKey)) {
+        weeklyData.set(weekKey, { weekLabel: col.weekLabel, weekYear: col.weekYear, entries: [] });
       }
-    }
 
-    fs.writeFileSync(tempInput, req.file.buffer);
-
-    const ftpFileName = `monthly_plan_${parsedYear}_${Date.now()}.xlsx`;
-    await uploadToFtp(tempInput, ftpFileName);
-    console.log(`[FTP] Monthly plan saved: ${ftpFileName}`);
-
-    const workbook = xlsx.read(req.file.buffer, {
-      type: "buffer",
-      cellDates: false,
-    });
-
-    const sheetName = workbook.SheetNames?.[0];
-    if (!sheetName) {
-      return res.status(400).json({
-        success: false,
-        message: "No worksheet found in the uploaded file.",
+      weeklyData.get(weekKey).entries.push({
+        date: col.dateStr,
+        planned: qty,
+        actual: null,
+        notes: "",
+        shift: "day",
       });
     }
 
-    const sheet = workbook.Sheets[sheetName];
-    if (!sheet) {
-      return res.status(400).json({
-        success: false,
-        message: "Unable to read the first worksheet.",
-      });
-    }
+    const weeksProcessedForPart = new Set();
+    const splitWeeksForPart = new Set();
 
-    const rawRows = xlsx.utils.sheet_to_json(sheet, {
-      header: 1,
-      defval: "",
-      raw: true,
-    });
+    for (const [weekKey, weekData] of weeklyData.entries()) {
+      const { weekLabel, weekYear, entries } = weekData;
+      const totalUploadedCapacity = entries.reduce((sum, entry) => sum + entry.planned, 0);
+      const headerDaysInWeek = headerDaysPerWeek.get(weekKey) ?? 0;
+      const isSplitWeek = headerDaysInWeek < 7;
 
-    if (rawRows.length < 2) {
-      return res.status(400).json({
-        success: false,
-        message: "File is empty or missing data rows.",
-      });
-    }
-
-    const sheetRange = sheet["!ref"]
-      ? xlsx.utils.decode_range(sheet["!ref"])
-      : null;
-    if (!sheetRange) {
-      return res.status(400).json({
-        success: false,
-        message: "Sheet has no readable range.",
-      });
-    }
-
-    const date1904 = Boolean(workbook.Workbook?.WBProps?.date1904);
-    const dateCols = [];
-    const headerDaysPerWeek = new Map();
-
-    for (let c = 3; c <= sheetRange.e.c; c += 1) {
-      const cellAddress = xlsx.utils.encode_cell({ r: 0, c });
-      const parsedDate = parseHeaderDateCell(sheet[cellAddress], date1904);
-      if (!parsedDate) continue;
-
-      const { y, m, d } = parsedDate;
-      const isoDateString = `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-      const utcDate = new Date(Date.UTC(y, m, d));
-      const { weekLabel, weekYear } = getCustomWeekInfo(utcDate);
-
-      dateCols.push({
-        colIndex: c,
-        dateStr: isoDateString,
-        weekLabel,
-        weekYear,
-      });
-    }
-
-    if (dateCols.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "No valid date columns found. Expected date values in the header row starting from Column D.",
-      });
-    }
-
-    const allMatrices = await Matrix.find({}).lean();
-    const matrixMap = new Map();
-
-    for (const mx of allMatrices) {
-      const partNo = String(mx.bom?.partNumber ?? "").trim();
-      if (!partNo) continue;
-
-      if (!matrixMap.has(partNo)) {
-        matrixMap.set(partNo, []);
-      }
-
-      matrixMap.get(partNo).push(mx);
-    }
-
-    let createdCount = 0;
-    let updatedCount = 0;
-    let skippedCount = 0;
-
-    const errors = [];
-    const notFound = [];
-    const processed = [];
-
-    for (let r = 1; r < rawRows.length; r += 1) {
-      const row = rawRows[r];
-      if (!row || row.every((cell) => cell === "" || cell == null)) continue;
-
-      const partNumber = String(row[1] ?? "").trim();
-      const partName = String(row[2] ?? "").trim();
-
-      if (!partNumber) continue;
-
-      const matchedMatrices = matrixMap.get(partNumber);
-      if (!matchedMatrices || matchedMatrices.length === 0) {
-        notFound.push({ partNumber, partName });
+      if (totalUploadedCapacity === 0 && !isSplitWeek) {
+        skippedCount += 1;
         continue;
       }
 
-      const weeklyData = new Map();
+      if (isSplitWeek) splitWeeksForPart.add(weekLabel);
+      weeksProcessedForPart.add(weekLabel);
 
-      for (const col of dateCols) {
-        const rawQty = row[col.colIndex];
-        const qty =
-          rawQty === "" || rawQty == null
-            ? 0
-            : Number.parseFloat(String(rawQty).replace(/,/g, "")) || 0;
+      const weekManpowerVal = manpower[weekLabel] ?? null;
 
-        if (qty <= 0) continue;
+      for (const matrix of matchedMatrices) {
+        try {
+          let plan = await ProductionPlan.findOne({ matrixRef: matrix._id, week: weekLabel, year: weekYear });
 
-        const weekKey = `${col.weekLabel}-${col.weekYear}`;
+          if (plan) {
+            const existingEntriesMap = new Map((plan.dailyEntries ?? []).map((entry) => [entry.date, toPlainDailyEntry(entry)]));
 
-        if (!weeklyData.has(weekKey)) {
-          weeklyData.set(weekKey, {
-            weekLabel: col.weekLabel,
-            weekYear: col.weekYear,
-            entries: [],
-          });
-        }
+            for (const newEntry of entries) {
+              if (existingEntriesMap.has(newEntry.date)) {
+                const existing = existingEntriesMap.get(newEntry.date);
+                existing.planned = newEntry.planned;
+                existingEntriesMap.set(newEntry.date, existing);
+              } else {
+                existingEntriesMap.set(newEntry.date, newEntry);
+              }
+            }
 
-        weeklyData.get(weekKey).entries.push({
-          date: col.dateStr,
-          planned: qty,
-          actual: null,
-          notes: "",
-          shift: "day",
-        });
-      }
+            const mergedEntries = Array.from(existingEntriesMap.values()).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+            const newCapacity = mergedEntries.reduce((sum, entry) => sum + (entry.planned || 0), 0);
+            const activeDays = mergedEntries.filter((entry) => entry.planned > 0).length;
 
-      const weeksProcessedForPart = new Set();
-      const splitWeeksForPart = new Set();
+            plan.dailyEntries = mergedEntries;
+            plan.capacity = newCapacity;
+            plan.workingDays = Math.max(activeDays, 1);
+            plan.isPartialWeek = isSplitWeek;
+            if (weekManpowerVal !== null) plan.notes = `Manpower: ${weekManpowerVal}`;
+            plan.updatedBy = userId;
 
-      for (const [weekKey, weekData] of weeklyData.entries()) {
-        const { weekLabel, weekYear, entries } = weekData;
+            await plan.save();
+            await syncDailyEntriesToCollection(plan, plan.dailyEntries, userId);
+            updatedCount += 1;
+          } else {
+            const activeDays = entries.filter((entry) => entry.planned > 0).length;
+            const workingDays = Math.max(activeDays, 1);
 
-        const totalUploadedCapacity = entries.reduce(
-          (sum, entry) => sum + entry.planned,
-          0,
-        );
-        const headerDaysInWeek = headerDaysPerWeek.get(weekKey) ?? 0;
-        const isSplitWeek = headerDaysInWeek < 7;
-
-        if (totalUploadedCapacity === 0 && !isSplitWeek) {
-          skippedCount += 1;
-          continue;
-        }
-
-        if (isSplitWeek) splitWeeksForPart.add(weekLabel);
-        weeksProcessedForPart.add(weekLabel);
-
-        const weekManpowerVal = manpower[weekLabel] ?? null;
-
-        for (const matrix of matchedMatrices) {
-          try {
-            let plan = await ProductionPlan.findOne({
-              matrixRef: matrix._id,
+            const newPlan = await ProductionPlan.create({
               week: weekLabel,
               year: weekYear,
+              workingDays,
+              capacity: totalUploadedCapacity,
+              isPartialWeek: isSplitWeek,
+              matrixRef: matrix._id,
+              model: matrix.model,
+              bom: matrix.bom,
+              shift: matrix.shift,
+              status: "PLANNED",
+              notes: weekManpowerVal !== null ? `Manpower: ${weekManpowerVal}` : "",
+              dailyEntries: entries,
+              createdBy: userId,
             });
 
-            if (plan) {
-              const existingEntriesMap = new Map(
-                (plan.dailyEntries ?? []).map((entry) => [
-                  entry.date,
-                  toPlainDailyEntry(entry),
-                ]),
-              );
-
-              for (const newEntry of entries) {
-                if (existingEntriesMap.has(newEntry.date)) {
-                  const existing = existingEntriesMap.get(newEntry.date);
-                  existing.planned = newEntry.planned;
-                  existingEntriesMap.set(newEntry.date, existing);
-                } else {
-                  existingEntriesMap.set(newEntry.date, newEntry);
-                }
-              }
-
-              const mergedEntries = Array.from(
-                existingEntriesMap.values(),
-              ).sort((a, b) => String(a.date).localeCompare(String(b.date)));
-
-              const newCapacity = mergedEntries.reduce(
-                (sum, entry) => sum + (entry.planned || 0),
-                0,
-              );
-              const activeDays = mergedEntries.filter(
-                (entry) => entry.planned > 0,
-              ).length;
-
-              plan.dailyEntries = mergedEntries;
-              plan.capacity = newCapacity;
-              plan.workingDays = Math.max(activeDays, 1);
-              plan.isPartialWeek = isSplitWeek;
-
-              if (weekManpowerVal !== null) {
-                plan.notes = `Manpower: ${weekManpowerVal}`;
-              }
-
-              plan.updatedBy = req.user?._id;
-
-              await plan.save();
-              await syncDailyEntriesToCollection(
-                plan,
-                plan.dailyEntries,
-                req.user?._id,
-              );
-
-              updatedCount += 1;
-            } else {
-              const activeDays = entries.filter(
-                (entry) => entry.planned > 0,
-              ).length;
-              const workingDays = Math.max(activeDays, 1);
-
-              const newPlan = await ProductionPlan.create({
-                week: weekLabel,
-                year: weekYear,
-                workingDays,
-                capacity: totalUploadedCapacity,
-                isPartialWeek: isSplitWeek,
-                matrixRef: matrix._id,
-                model: matrix.model,
-                bom: matrix.bom,
-                shift: matrix.shift,
-                status: "PLANNED",
-                notes:
-                  weekManpowerVal !== null
-                    ? `Manpower: ${weekManpowerVal}`
-                    : "",
-                dailyEntries: entries,
-                createdBy: req.user?._id,
-              });
-
-              await syncDailyEntriesToCollection(
-                newPlan,
-                newPlan.dailyEntries,
-                req.user?._id,
-              );
-              createdCount += 1;
-            }
-          } catch (error) {
-            errors.push({
-              partNumber,
-              week: weekLabel,
-              error: error.message,
-            });
+            await syncDailyEntriesToCollection(newPlan, newPlan.dailyEntries, userId);
+            createdCount += 1;
           }
+        } catch (error) {
+          errors.push({ partNumber, week: weekLabel, error: error.message });
         }
       }
-
-      processed.push({
-        partNumber,
-        partName,
-        matrixCount: matchedMatrices.length,
-        weeks: Array.from(weeksProcessedForPart),
-        splitWeeks: Array.from(splitWeeksForPart),
-      });
     }
 
-    const allSplitWeeks = Array.from(
-      new Set(processed.flatMap((item) => item.splitWeeks)),
-    ).sort(
-      (a, b) =>
-        Number.parseInt(a.slice(1), 10) - Number.parseInt(b.slice(1), 10),
-    );
-
-    return res.status(201).json({
-      success: true,
-      message: `Import complete. Created: ${createdCount}, Updated: ${updatedCount}.`,
-      summary: {
-        created: createdCount,
-        updated: updatedCount,
-        skipped: skippedCount,
-        errors,
-        processed,
-        notFound,
-        splitWeeks: allSplitWeeks,
-        datesFound: dateCols.length,
-        rowsInFile: rawRows.length - 1,
-      },
+    processed.push({
+      partNumber,
+      partName,
+      matrixCount: matchedMatrices.length,
+      weeks: Array.from(weeksProcessedForPart),
+      splitWeeks: Array.from(splitWeeksForPart),
     });
+  }
+
+  const allSplitWeeks = Array.from(new Set(processed.flatMap((item) => item.splitWeeks))).sort((a, b) => Number.parseInt(a.slice(1), 10) - Number.parseInt(b.slice(1), 10));
+
+  return {
+    success: true,
+    message: `Import complete. Created: ${createdCount}, Updated: ${updatedCount}.`,
+    summary: {
+      created: createdCount,
+      updated: updatedCount,
+      skipped: skippedCount,
+      errors,
+      processed,
+      notFound,
+      splitWeeks: allSplitWeeks,
+      datesFound: dateCols.length,
+      rowsInFile: rawRows.length - 1,
+    },
+  };
+};
+
+// =============================================================================
+// UPLOAD MONTHLY PLAN FROM EXCEL (HTTP Route Wrapper)
+// =============================================================================
+export const uploadMonthlyPlan = async (req, res) => {
+  const tempInput = path.join(TEMP_PATH, `monthly_${Date.now()}_${Math.random().toString(36).slice(2)}.xlsx`);
+
+  try {
+    if (!req.file) return res.status(400).json({ success: false, message: "No file uploaded" });
+
+    const parsedYear = req.body.year ? Number.parseInt(req.body.year, 10) : new Date().getFullYear();
+    if (!Number.isInteger(parsedYear)) return res.status(400).json({ success: false, message: "Invalid year value" });
+
+    let manpower = {};
+    if (req.body.manpower) {
+      try { manpower = typeof req.body.manpower === "string" ? JSON.parse(req.body.manpower) : req.body.manpower; } 
+      catch { return res.status(400).json({ success: false, message: "Invalid manpower JSON format" }); }
+    }
+
+    fs.writeFileSync(tempInput, req.file.buffer);
+    const ftpFileName = `monthly_plan_${parsedYear}_${Date.now()}.xlsx`;
+    await uploadToFtp(tempInput, ftpFileName);
+
+    const result = await processMonthlyExcelBuffer(req.file.buffer, parsedYear, manpower, req.user?._id);
+    return res.status(201).json(result);
+
   } catch (err) {
     console.error("uploadMonthlyPlan Error:", err);
-    return res.status(500).json({
-      success: false,
-      message: err.message || "Failed to upload monthly plan",
-    });
+    return res.status(500).json({ success: false, message: err.message || "Failed to upload monthly plan" });
   } finally {
     cleanupTemp(tempInput);
   }

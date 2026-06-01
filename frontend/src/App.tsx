@@ -6,7 +6,7 @@ import SCMDashboard from "./pages/page/scm-dashboard/scm-dashboard";
 import InventoryDashboard from "./pages/page/inventory-dashboard";
 import ManpowerPlanningDashboard from "./pages/page/manpower-planning-dashboard";
 import Masters from "./pages/page/masters/masters";
-import WeeklyEntry from "./pages/page/weekly-entry.tsx/entry";
+// import WeeklyEntry from "./pages/page/weekly-entry.tsx/entry";
 import ProductionCalendar from "./pages/page/production-calendar/production-calendar";
 
 // ─── Protected Route ──────────────────────────────────────────────────────────
@@ -77,16 +77,16 @@ const routes = createBrowserRouter([
       </ProtectedRoute>
     ),
   },
-  {
-    path: '/weekly-entry',
-    element: (
-      <ProtectedRoute>
-        <AppLayout>
-          <WeeklyEntry />
-        </AppLayout>
-      </ProtectedRoute>
-    ),
-  },
+  // {
+  //   path: '/weekly-entry',
+  //   element: (
+  //     <ProtectedRoute>
+  //       <AppLayout>
+  //         <WeeklyEntry />
+  //       </AppLayout>
+  //     </ProtectedRoute>
+  //   ),
+  // },
   {
     path: '/production-calendar',
     element: (

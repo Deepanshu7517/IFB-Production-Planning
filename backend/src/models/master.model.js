@@ -186,12 +186,17 @@ const matrixSchema = new mongoose.Schema(
       childPartList: [childBomSchema],
     },
 
+    // shift: {
+    //   type: String,
+    //   enum: ["A", "B", "C"],
+    //   required: true,
+    // },
+    // Replace the existing shift property in matrixSchema with this:
     shift: {
-      type: String,
+      type: [String],
       enum: ["A", "B", "C"],
-      required: true,
+      default: ["A"],
     },
-
     manpowerAvailability: Number,
   },
   { timestamps: true },
