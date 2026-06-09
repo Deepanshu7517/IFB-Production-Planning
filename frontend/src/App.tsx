@@ -8,13 +8,20 @@ import ManpowerPlanningDashboard from "./pages/page/manpower-planning-dashboard"
 import Masters from "./pages/page/masters/masters";
 // import WeeklyEntry from "./pages/page/weekly-entry.tsx/entry";
 import ProductionCalendar from "./pages/page/production-calendar/production-calendar";
+import ApiStatusBanner from "./components/ui/ApiStatusBanner";
+import ErrorBoundary from "./components/ui/ErrorBoundary";
 
 // ─── Protected Route ──────────────────────────────────────────────────────────
 // Checks localStorage for 'production_user'.
 // If not found → redirect to sign-in page.
 // If found     → render the child page normally.
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const user = localStorage.getItem('production_user');
+  let user: string | null = null;
+  try {
+    user = localStorage.getItem('production_user');
+  } catch {
+    user = null;
+  }
   if (!user) return <Navigate to="/" replace />;
   return <>{children}</>;
 };
@@ -100,7 +107,14 @@ const routes = createBrowserRouter([
 ]);
 
 const App = () => {
-  return <RouterProvider router={routes} />;
+  return (
+    <>
+      <ApiStatusBanner />
+      <ErrorBoundary>
+        <RouterProvider router={routes} />
+      </ErrorBoundary>
+    </>
+  );
 };
 
 export default App;

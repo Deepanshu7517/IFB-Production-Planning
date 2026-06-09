@@ -1,0 +1,4 @@
+1. Check why the Aw snap is coming in the application check for both the frontend and the backend.
+2. In the production Calendar make sure to display all month and weeks data because sometime even after click's it doesn't get displayed.
+3. Matrix: Make sure to display the FG part even when we expand a column, also make the header sticky and just make the matrix top bar disappear and remove the empty spaces.
+4. Implement the FG coverage.

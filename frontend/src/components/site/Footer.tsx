@@ -21,12 +21,12 @@ const Footer = () => {
     return `${day}-${month}-${year} ${hours}:${minutes}:${seconds}`;
   };
   return (
-    <footer className="footer sm:footer-horizontal bg-neutral text-neutral-content items-center p-4 sticky bottom-0 z-50">
+    <footer className="footer sm:footer-horizontal bg-neutral text-neutral-content items-center py-0.5 px-4 sticky bottom-0 z-50">
       <aside className="grid-flow-col items-center">
-        <p>© Design and Developed by Iotelligence Software Solutions, Goa</p>
+        <p className="text-xs opacity-80">© Iotelligence Software Solutions, Goa</p>
       </aside>
       <nav className="grid-flow-col gap-4 md:place-self-center md:justify-self-end">
-        <div>
+        <div className="text-xs opacity-80 tabular-nums">
           {formatDateTime(dateTime)}
         </div>
       </nav>

@@ -900,11 +900,28 @@ export const createProductionPlan = async (req, res) => {
         .json({ success: false, message: `Matrix not found: ${matrixId}` });
     }
 
-    const planYear = year || new Date().getFullYear();
-    const planCapacity =
-      capacity != null ? capacity : (matrix.model?.assemblyLine?.capacity ?? 0);
+    // const planYear = year || new Date().getFullYear();
+    // const planCapacity =
+    //   capacity != null ? capacity : (matrix.model?.assemblyLine?.capacity ?? 0);
+    // const planDays = workingDays ?? 6;
+const planYear = year || new Date().getFullYear();
     const planDays = workingDays ?? 6;
 
+    // --- NEW: Calculate True Weekly Capacity ---
+    // 1. Get base capacity from the Matrix's Assembly Line
+    const baseCapacity = matrix.model?.assemblyLine?.capacity ?? 0;
+    
+    // 2. Count the number of shifts stored in the Matrix
+    let shiftCount = 1;
+    if (Array.isArray(matrix.shift)) {
+      shiftCount = matrix.shift.length;
+    } else if (typeof matrix.shift === "string") {
+      shiftCount = matrix.shift.split(",").filter((s) => s.trim()).length || 1;
+    }
+
+    // 3. Formula: Base Capacity * Shifts * Working Days
+    const planCapacity = baseCapacity * shiftCount * planDays;
+    // ---------------------------------------------
     const exists = await ProductionPlan.exists({
       matrixRef: matrixId,
       week,
@@ -1136,11 +1153,10 @@ export const getDailyEntries = async (req, res) => {
 // =============================================================================
 // DAILY ENTRIES — UPDATE ONE DAY (With Surplus & Shortfall Redistribution)
 // =============================================================================
-// RESTORED IN THIS FILE TO FIX THE EXPORT ERROR
 export const updateDailyEntry = async (req, res) => {
   try {
     const { id, date } = req.params;
-    const { actual, notes, shift, redistribution } = req.body;
+    const { actual, notes, shift } = req.body; // <-- We safely ignore redistribution now
 
     if (actual !== null && (actual === undefined || actual < 0)) {
       return res.status(400).json({
@@ -1163,31 +1179,12 @@ export const updateDailyEntry = async (req, res) => {
       });
     }
 
+    // 1. ONLY update actual, notes, and shift. We NEVER touch "planned" here anymore.
     plan.dailyEntries[idx].actual = actual !== null ? parseInt(actual) : null;
     if (notes !== undefined) plan.dailyEntries[idx].notes = notes;
     if (shift) plan.dailyEntries[idx].shift = shift;
 
-    const shortfall =
-      actual !== null ? plan.dailyEntries[idx].planned - parseInt(actual) : 0;
-
-    if (actual === null || shortfall === 0) {
-      recomputeBacklog(plan.dailyEntries, plan.capacity);
-    } else if (redistribution && Array.isArray(redistribution)) {
-      plan.dailyEntries[idx].backlog = shortfall;
-
-      for (const dist of redistribution) {
-        const fIdx = plan.dailyEntries.findIndex((e) => e.date === dist.date);
-        if (fIdx !== -1) {
-          plan.dailyEntries[fIdx].planned += dist.addedPlanned;
-          if (plan.dailyEntries[fIdx].planned < 0) {
-            plan.dailyEntries[fIdx].planned = 0;
-          }
-        }
-      }
-    } else {
-      recomputeBacklog(plan.dailyEntries, plan.capacity);
-    }
-
+    // 2. Set plan status
     const allDone = plan.dailyEntries.every((e) => e.actual !== null);
     if (allDone) plan.status = "COMPLETED";
     else if (
@@ -1199,6 +1196,7 @@ export const updateDailyEntry = async (req, res) => {
     plan.updatedBy = req.user?._id;
     await plan.save();
 
+    // 3. Sync to DailyEntry collection securely
     const daysToUpdate = plan.dailyEntries.filter((e) => e.date >= date);
 
     for (const d of daysToUpdate) {
@@ -1253,6 +1251,139 @@ export const updateDailyEntry = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+// RESTORED IN THIS FILE TO FIX THE EXPORT ERROR
+// export const updateDailyEntry = async (req, res) => {
+//   try {
+//     const { id, date } = req.params;
+//     const { actual, notes, shift, redistribution } = req.body;
+
+//     if (actual !== null && (actual === undefined || actual < 0)) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "actual must be null or a non-negative number",
+//       });
+//     }
+
+//     const plan = await ProductionPlan.findById(id);
+//     if (!plan)
+//       return res
+//         .status(404)
+//         .json({ success: false, message: "Production plan not found" });
+
+//     const idx = plan.dailyEntries.findIndex((e) => e.date === date);
+//     if (idx === -1) {
+//       return res.status(404).json({
+//         success: false,
+//         message: `No daily entry mapped for date ${date}`,
+//       });
+//     }
+
+//     plan.dailyEntries[idx].actual = actual !== null ? parseInt(actual) : null;
+//     if (notes !== undefined) plan.dailyEntries[idx].notes = notes;
+//     if (shift) plan.dailyEntries[idx].shift = shift;
+
+//     // const shortfall =
+//     //   actual !== null ? plan.dailyEntries[idx].planned - parseInt(actual) : 0;
+
+//     // if (actual === null || shortfall === 0) {
+//     //   recomputeBacklog(plan.dailyEntries, plan.capacity);
+//     // } else if (redistribution && Array.isArray(redistribution)) {
+//     //   plan.dailyEntries[idx].backlog = shortfall;
+
+//     //   for (const dist of redistribution) {
+//     //     const fIdx = plan.dailyEntries.findIndex((e) => e.date === dist.date);
+//     //     if (fIdx !== -1) {
+//     //       plan.dailyEntries[fIdx].planned += dist.addedPlanned;
+//     //       if (plan.dailyEntries[fIdx].planned < 0) {
+//     //         plan.dailyEntries[fIdx].planned = 0;
+//     //       }
+//     //     }
+//     //   }
+//     // } else {
+//     //   recomputeBacklog(plan.dailyEntries, plan.capacity);
+//     // }
+// const shortfall =
+//       actual !== null ? plan.dailyEntries[idx].planned - parseInt(actual) : 0;
+
+//     plan.dailyEntries[idx].backlog = shortfall;
+
+//     // Only touch future planned dates IF a redistribution payload is strictly provided
+//     if (redistribution && Array.isArray(redistribution)) {
+//       for (const dist of redistribution) {
+//         const fIdx = plan.dailyEntries.findIndex((e) => e.date === dist.date);
+//         if (fIdx !== -1) {
+//           plan.dailyEntries[fIdx].planned += dist.addedPlanned;
+//           if (plan.dailyEntries[fIdx].planned < 0) {
+//             plan.dailyEntries[fIdx].planned = 0;
+//           }
+//         }
+//       }
+//     }
+//     const allDone = plan.dailyEntries.every((e) => e.actual !== null);
+//     if (allDone) plan.status = "COMPLETED";
+//     else if (
+//       plan.status === "PLANNED" &&
+//       plan.dailyEntries.some((e) => e.actual !== null)
+//     )
+//       plan.status = "IN_PROGRESS";
+
+//     plan.updatedBy = req.user?._id;
+//     await plan.save();
+
+//     const daysToUpdate = plan.dailyEntries.filter((e) => e.date >= date);
+
+//     for (const d of daysToUpdate) {
+//       await DailyEntry.findOneAndUpdate(
+//         { planId: plan._id, date: d.date },
+//         {
+//           $set: {
+//             planId: plan._id,
+//             date: d.date,
+//             week: plan.week,
+//             year: plan.year,
+//             planned: d.planned,
+//             actual: d.actual,
+//             notes: d.notes ?? "",
+//             shift: d.shift ?? "day",
+//             plant: {
+//               plantId: plan.model?.assemblyLine?.plant?.plantId ?? "",
+//               plantName: plan.model?.assemblyLine?.plant?.plantName ?? "",
+//             },
+//             assemblyLine: {
+//               assemblyLineId: plan.model?.assemblyLine?.assemblyLineId ?? "",
+//               assemblyLineName:
+//                 plan.model?.assemblyLine?.assemblyLineName ?? "",
+//             },
+//             model: {
+//               modelId: plan.model?.modelId ?? "",
+//               modelName: plan.model?.modelName ?? "",
+//             },
+//             part: {
+//               partNumber: plan.bom?.partNumber ?? "",
+//               partName: plan.bom?.partName ?? "",
+//             },
+//             enteredBy: req.user?._id ?? null,
+//           },
+//         },
+//         { upsert: true, new: true },
+//       );
+//     }
+
+//     res.status(200).json({
+//       success: true,
+//       data: {
+//         entry: plan.dailyEntries[idx],
+//         entries: plan.dailyEntries,
+//         summary: entrySummary(plan),
+//         status: plan.status,
+//       },
+//       message: "Daily entry updated",
+//     });
+//   } catch (err) {
+//     console.error("upsertDailyEntry error:", err);
+//     res.status(500).json({ success: false, message: err.message });
+//   }
+// };
 
 // =============================================================================
 // ANALYTICS
@@ -1875,7 +2006,12 @@ const toPlainDailyEntry = (entry) => {
 // =============================================================================
 // CORE EXCEL PROCESSING LOGIC (Decoupled for Automation & Manual Upload)
 // =============================================================================
-export const processMonthlyExcelBuffer = async (fileBuffer, parsedYear, manpower, userId) => {
+export const processMonthlyExcelBuffer = async (
+  fileBuffer,
+  parsedYear,
+  manpower,
+  userId,
+) => {
   const workbook = xlsx.read(fileBuffer, {
     type: "buffer",
     cellDates: false,
@@ -1893,9 +2029,12 @@ export const processMonthlyExcelBuffer = async (fileBuffer, parsedYear, manpower
     raw: true,
   });
 
-  if (rawRows.length < 2) throw new Error("File is empty or missing data rows.");
+  if (rawRows.length < 2)
+    throw new Error("File is empty or missing data rows.");
 
-  const sheetRange = sheet["!ref"] ? xlsx.utils.decode_range(sheet["!ref"]) : null;
+  const sheetRange = sheet["!ref"]
+    ? xlsx.utils.decode_range(sheet["!ref"])
+    : null;
   if (!sheetRange) throw new Error("Sheet has no readable range.");
 
   const date1904 = Boolean(workbook.Workbook?.WBProps?.date1904);
@@ -1955,12 +2094,19 @@ export const processMonthlyExcelBuffer = async (fileBuffer, parsedYear, manpower
 
     for (const col of dateCols) {
       const rawQty = row[col.colIndex];
-      const qty = rawQty === "" || rawQty == null ? 0 : Number.parseFloat(String(rawQty).replace(/,/g, "")) || 0;
+      const qty =
+        rawQty === "" || rawQty == null
+          ? 0
+          : Number.parseFloat(String(rawQty).replace(/,/g, "")) || 0;
       if (qty <= 0) continue;
 
       const weekKey = `${col.weekLabel}-${col.weekYear}`;
       if (!weeklyData.has(weekKey)) {
-        weeklyData.set(weekKey, { weekLabel: col.weekLabel, weekYear: col.weekYear, entries: [] });
+        weeklyData.set(weekKey, {
+          weekLabel: col.weekLabel,
+          weekYear: col.weekYear,
+          entries: [],
+        });
       }
 
       weeklyData.get(weekKey).entries.push({
@@ -1977,7 +2123,10 @@ export const processMonthlyExcelBuffer = async (fileBuffer, parsedYear, manpower
 
     for (const [weekKey, weekData] of weeklyData.entries()) {
       const { weekLabel, weekYear, entries } = weekData;
-      const totalUploadedCapacity = entries.reduce((sum, entry) => sum + entry.planned, 0);
+      const totalUploadedCapacity = entries.reduce(
+        (sum, entry) => sum + entry.planned,
+        0,
+      );
       const headerDaysInWeek = headerDaysPerWeek.get(weekKey) ?? 0;
       const isSplitWeek = headerDaysInWeek < 7;
 
@@ -1993,10 +2142,19 @@ export const processMonthlyExcelBuffer = async (fileBuffer, parsedYear, manpower
 
       for (const matrix of matchedMatrices) {
         try {
-          let plan = await ProductionPlan.findOne({ matrixRef: matrix._id, week: weekLabel, year: weekYear });
+          let plan = await ProductionPlan.findOne({
+            matrixRef: matrix._id,
+            week: weekLabel,
+            year: weekYear,
+          });
 
           if (plan) {
-            const existingEntriesMap = new Map((plan.dailyEntries ?? []).map((entry) => [entry.date, toPlainDailyEntry(entry)]));
+            const existingEntriesMap = new Map(
+              (plan.dailyEntries ?? []).map((entry) => [
+                entry.date,
+                toPlainDailyEntry(entry),
+              ]),
+            );
 
             for (const newEntry of entries) {
               if (existingEntriesMap.has(newEntry.date)) {
@@ -2008,41 +2166,87 @@ export const processMonthlyExcelBuffer = async (fileBuffer, parsedYear, manpower
               }
             }
 
-            const mergedEntries = Array.from(existingEntriesMap.values()).sort((a, b) => String(a.date).localeCompare(String(b.date)));
-            const newCapacity = mergedEntries.reduce((sum, entry) => sum + (entry.planned || 0), 0);
-            const activeDays = mergedEntries.filter((entry) => entry.planned > 0).length;
+            const mergedEntries = Array.from(existingEntriesMap.values()).sort(
+              (a, b) => String(a.date).localeCompare(String(b.date)),
+            );
+            // const newCapacity = mergedEntries.reduce(
+            //   (sum, entry) => sum + (entry.planned || 0),
+            //   0,
+            // );
+            // --- NEW: True Capacity for Updated Plans ---
+            const baseCapacity = matrix.model?.assemblyLine?.capacity ?? 0;
+            let shiftCount = 1;
+            if (Array.isArray(matrix.shift)) {
+              shiftCount = matrix.shift.length;
+            } else if (typeof matrix.shift === "string") {
+              shiftCount = matrix.shift.split(",").filter((s) => s.trim()).length || 1;
+            }
+            // const activeDays = mergedEntries.filter((entry) => entry.planned > 0).length;
+            // const newCapacity = baseCapacity * shiftCount * Math.max(activeDays, 1);
+            const activeDays = mergedEntries.filter(
+              (entry) => entry.planned > 0,
+            ).length;
 
             plan.dailyEntries = mergedEntries;
-            plan.capacity = newCapacity;
+            // Always pull the true machine capacity from the Matrix
+            plan.capacity = matrix.model?.assemblyLine?.capacity ?? 0;
+            // ------------------------------------------
+            // const activeDays = mergedEntries.filter(
+            //   (entry) => entry.planned > 0,
+            // ).length;
+
+            // plan.dailyEntries = mergedEntries;
+            // plan.capacity = newCapacity;
             plan.workingDays = Math.max(activeDays, 1);
             plan.isPartialWeek = isSplitWeek;
-            if (weekManpowerVal !== null) plan.notes = `Manpower: ${weekManpowerVal}`;
+            if (weekManpowerVal !== null)
+              plan.notes = `Manpower: ${weekManpowerVal}`;
             plan.updatedBy = userId;
 
             await plan.save();
             await syncDailyEntriesToCollection(plan, plan.dailyEntries, userId);
             updatedCount += 1;
           } else {
-            const activeDays = entries.filter((entry) => entry.planned > 0).length;
+            const activeDays = entries.filter(
+              (entry) => entry.planned > 0,
+            ).length;
             const workingDays = Math.max(activeDays, 1);
-
-            const newPlan = await ProductionPlan.create({
+const baseCapacity = matrix.model?.assemblyLine?.capacity ?? 0;
+            let shiftCount = 1;
+            if (Array.isArray(matrix.shift)) {
+              shiftCount = matrix.shift.length;
+            } else if (typeof matrix.shift === "string") {
+              shiftCount = matrix.shift.split(",").filter((s) => s.trim()).length || 1;
+            }
+            const trueCapacity = baseCapacity * shiftCount * workingDays;
+            // ----------------------------------------
+const newPlan = await ProductionPlan.create({
               week: weekLabel,
               year: weekYear,
               workingDays,
-              capacity: totalUploadedCapacity,
+              capacity: matrix.model?.assemblyLine?.capacity ?? 0,
+            // const newPlan = await ProductionPlan.create({
+            //   week: weekLabel,
+            //   year: weekYear,
+            //   workingDays,
+            //   capacity: trueCapacity,
               isPartialWeek: isSplitWeek,
               matrixRef: matrix._id,
               model: matrix.model,
               bom: matrix.bom,
               shift: matrix.shift,
               status: "PLANNED",
-              notes: weekManpowerVal !== null ? `Manpower: ${weekManpowerVal}` : "",
+              notes:
+                weekManpowerVal !== null ? `Manpower: ${weekManpowerVal}` : "",
               dailyEntries: entries,
               createdBy: userId,
             });
 
-            await syncDailyEntriesToCollection(newPlan, newPlan.dailyEntries, userId);
+            await syncDailyEntriesToCollection(
+              newPlan,
+              newPlan.dailyEntries,
+              userId,
+            );
             createdCount += 1;
           }
         } catch (error) {
@@ -2060,7 +2264,11 @@ export const processMonthlyExcelBuffer = async (fileBuffer, parsedYear, manpower
     });
   }
 
-  const allSplitWeeks = Array.from(new Set(processed.flatMap((item) => item.splitWeeks))).sort((a, b) => Number.parseInt(a.slice(1), 10) - Number.parseInt(b.slice(1), 10));
+  const allSplitWeeks = Array.from(
+    new Set(processed.flatMap((item) => item.splitWeeks)),
+  ).sort(
+    (a, b) => Number.parseInt(a.slice(1), 10) - Number.parseInt(b.slice(1), 10),
+  );
 
   return {
     success: true,
@@ -2083,30 +2291,58 @@ export const processMonthlyExcelBuffer = async (fileBuffer, parsedYear, manpower
 // UPLOAD MONTHLY PLAN FROM EXCEL (HTTP Route Wrapper)
 // =============================================================================
 export const uploadMonthlyPlan = async (req, res) => {
-  const tempInput = path.join(TEMP_PATH, `monthly_${Date.now()}_${Math.random().toString(36).slice(2)}.xlsx`);
+  const tempInput = path.join(
+    TEMP_PATH,
+    `monthly_${Date.now()}_${Math.random().toString(36).slice(2)}.xlsx`,
+  );
 
   try {
-    if (!req.file) return res.status(400).json({ success: false, message: "No file uploaded" });
+    if (!req.file)
+      return res
+        .status(400)
+        .json({ success: false, message: "No file uploaded" });
 
-    const parsedYear = req.body.year ? Number.parseInt(req.body.year, 10) : new Date().getFullYear();
-    if (!Number.isInteger(parsedYear)) return res.status(400).json({ success: false, message: "Invalid year value" });
+    const parsedYear = req.body.year
+      ? Number.parseInt(req.body.year, 10)
+      : new Date().getFullYear();
+    if (!Number.isInteger(parsedYear))
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid year value" });
 
     let manpower = {};
     if (req.body.manpower) {
-      try { manpower = typeof req.body.manpower === "string" ? JSON.parse(req.body.manpower) : req.body.manpower; } 
-      catch { return res.status(400).json({ success: false, message: "Invalid manpower JSON format" }); }
+      try {
+        manpower =
+          typeof req.body.manpower === "string"
+            ? JSON.parse(req.body.manpower)
+            : req.body.manpower;
+      } catch {
+        return res
+          .status(400)
+          .json({ success: false, message: "Invalid manpower JSON format" });
+      }
     }
 
     fs.writeFileSync(tempInput, req.file.buffer);
     const ftpFileName = `monthly_plan_${parsedYear}_${Date.now()}.xlsx`;
     await uploadToFtp(tempInput, ftpFileName);
 
-    const result = await processMonthlyExcelBuffer(req.file.buffer, parsedYear, manpower, req.user?._id);
+    const result = await processMonthlyExcelBuffer(
+      req.file.buffer,
+      parsedYear,
+      manpower,
+      req.user?._id,
+    );
     return res.status(201).json(result);
-
   } catch (err) {
     console.error("uploadMonthlyPlan Error:", err);
-    return res.status(500).json({ success: false, message: err.message || "Failed to upload monthly plan" });
+    return res
+      .status(500)
+      .json({
+        success: false,
+        message: err.message || "Failed to upload monthly plan",
+      });
   } finally {
     cleanupTemp(tempInput);
   }

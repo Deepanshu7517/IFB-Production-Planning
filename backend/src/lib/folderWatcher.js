@@ -1,6 +1,4 @@
 import '../env.js'; // ensures dotenv runs before anything else
-import FtpSrv from 'ftp-srv';
-// ... rest of file
 import chokidar from 'chokidar';
 import fs from 'fs';
 import path from 'path';
@@ -24,6 +22,21 @@ if (!fs.existsSync(PROCESSED_FOLDER)) fs.mkdirSync(PROCESSED_FOLDER, { recursive
 
 // Processing lock — prevents double-processing if two files arrive at once
 let isProcessing = false;
+let watcherInstance = null;
+let latestProcessingResult = null;
+const retryTimers = new Map();
+
+const scheduleRetry = (watcher, filePath, delayMs, reason) => {
+  if (retryTimers.has(filePath)) return;
+
+  console.warn(`[WATCHER] ${reason}. Retrying ${path.basename(filePath)} in ${Math.round(delayMs / 1000)}s.`);
+  const timer = setTimeout(() => {
+    retryTimers.delete(filePath);
+    if (fs.existsSync(filePath)) watcher.emit('add', filePath);
+  }, delayMs);
+
+  retryTimers.set(filePath, timer);
+};
 
 // ── Process a single BOM Excel file ──────────────────────────────────────────
 async function processBomFile(filePath) {
@@ -39,7 +52,8 @@ async function processBomFile(filePath) {
 
     if (rawRows.length < 2) {
       console.log(`[WATCHER] Skipping ${fileName} — no data rows`);
-      return { success: false, message: 'No data rows' };
+      latestProcessingResult = { success: false, file: fileName, message: 'No data rows' };
+      return latestProcessingResult;
     }
 
     const bomMap = {};
@@ -74,7 +88,8 @@ async function processBomFile(filePath) {
 
     const incoming = Object.values(bomMap);
     if (incoming.length === 0) {
-      return { success: false, message: 'No valid BOM data found' };
+      latestProcessingResult = { success: false, file: fileName, message: 'No valid BOM data found' };
+      return latestProcessingResult;
     }
 
     const childHash = list =>
@@ -134,6 +149,7 @@ async function processBomFile(filePath) {
       JSON.stringify(result, null, 2)
     );
 
+    latestProcessingResult = result;
     return result;
 
   } catch (err) {
@@ -145,12 +161,15 @@ async function processBomFile(filePath) {
       fs.renameSync(filePath, path.join(PROCESSED_FOLDER, `${timestamp}_ERROR_${fileName}`));
     } catch { /* silent */ }
 
-    return { success: false, file: fileName, error: err.message };
+    latestProcessingResult = { success: false, file: fileName, error: err.message };
+    return latestProcessingResult;
   }
 }
 
 // ── Get the latest result for API status endpoint ─────────────────────────────
 export function getLatestProcessingResult() {
+  if (latestProcessingResult) return latestProcessingResult;
+
   try {
     const files = fs.readdirSync(PROCESSED_FOLDER)
       .filter(f => f.endsWith('_result.json'))
@@ -166,6 +185,11 @@ export function getLatestProcessingResult() {
 
 // ── Start watching the folder ─────────────────────────────────────────────────
 export function startFolderWatcher() {
+  if (watcherInstance) {
+    console.log('[WATCHER] Folder watcher already running');
+    return watcherInstance;
+  }
+
   console.log(`[WATCHER] Watching for BOM files in: ${WATCH_FOLDER}`);
   console.log(`[WATCHER] Processed files go to:     ${PROCESSED_FOLDER}`);
 
@@ -181,10 +205,15 @@ export function startFolderWatcher() {
 
   watcher.on('add', async filePath => {
     if (!/\.(xlsx|xls)$/i.test(filePath)) return;
+    if (!fs.existsSync(filePath)) return;
+    if (BOM.db.readyState !== 1) {
+      scheduleRetry(watcher, filePath, 5000, 'Database is not connected');
+      return;
+    }
     if (isProcessing) {
       console.log(`[WATCHER] Already processing — queuing ${path.basename(filePath)}`);
       // Wait and retry
-      setTimeout(() => watcher.emit('add', filePath), 3000);
+      scheduleRetry(watcher, filePath, 3000, 'Another BOM file is being processed');
       return;
     }
     isProcessing = true;
@@ -196,6 +225,8 @@ export function startFolderWatcher() {
   });
 
   watcher.on('error', err => console.error('[WATCHER] Error:', err));
+  watcher.on('ready', () => console.log('[WATCHER] Ready'));
 
+  watcherInstance = watcher;
   return watcher;
 }

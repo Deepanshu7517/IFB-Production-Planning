@@ -7,6 +7,7 @@ import {
   TrendingDown,
   AlertTriangle,
 } from 'lucide-react';
+import { API_BASE as _API_BASE } from '../../../config/api';
 
 // =============================================================================
 // TYPES
@@ -120,13 +121,7 @@ interface WeekStat {
 // CONSTANTS
 // =============================================================================
 
-let currentHost = window.location.hostname;
-
-if (currentHost === 'tauri.localhost') {
-  currentHost = 'localhost';
-}
-
-const API_BASE_URL = `http://${currentHost}:5001/api`;
+const API_BASE_URL = _API_BASE;
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',

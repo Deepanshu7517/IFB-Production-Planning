@@ -22,15 +22,13 @@ const AppLayout = ({ children }: { children: React.ReactElement }) => {
       {" "}
       {/* Added lg:drawer-open back for your permanent desktop view */}
       <input id="my-drawer-3" type="checkbox" className="drawer-toggle" />
-      <div className="drawer-content flex flex-col min-h-screen">
-        <header className="sticky top-0 z-30">
-          <Navbar />
-        </header>
-
-        <main className="flex-grow bg-gray-100/60">
-          {/* <NotificationBell /> */}
-          {children}
-        </main>
+  <div className="drawer-content flex flex-col min-h-screen">
+    <header className="sticky top-0 z-30">
+      <Navbar />
+    </header>
+    <main className="flex-grow bg-gray-100/60">
+      {children}
+    </main>
 
         <Footer />
       </div>

@@ -245,30 +245,51 @@ import cors from 'cors';
 import path from 'path';
 import { startFtpServer } from './lib/ftp.js';
 import { startFolderWatcher, WATCH_FOLDER, getLatestProcessingResult } from './lib/folderWatcher.js';
-import { startSapAutomator } from './lib/sapAutomator.js'; 
+// import { startSapAutomator } from './lib/sapAutomator.js'; 
 import authRoutes from './routes/auth.route.js';
 import groupRoutes from './routes/group.route.js';
 import masterRoutes from './routes/master.route.js';
 import messageRoutes from './routes/message.route.js';
 import productionPlanRoutes from './routes/productionPlan.route.js';
 import productionAuthRoutes from './routes/productionAuth.route.js';
-import { connectDB, connectLocalhostDB } from './lib/db.js';
+import { connectDB, waitForLocalhostDB } from './lib/db.js';
 const app = express();
 
-startFtpServer();
-startFolderWatcher();
-startSapAutomator()
+const startBackgroundService = (name, starter) => {
+  try {
+    return starter();
+  } catch (error) {
+    console.error(`[STARTUP] ${name} failed:`, error.message);
+    return null;
+  }
+};
+
+process.on('uncaughtException', (error) => {
+  console.error('[PROCESS] Uncaught exception:', error);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[PROCESS] Unhandled rejection:', reason);
+});
+
+startBackgroundService('FTP server', startFtpServer);
+// startSapAutomator()
 app.use(cors({
   origin: function (origin, callback) {
     callback(null, true);
   },
   credentials: true
 }));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '25mb' }));
+app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
 connectDB();
-connectLocalhostDB();
+waitForLocalhostDB().then((ready) => {
+  if (!ready) {
+    console.warn('[STARTUP] Local MongoDB is not ready yet. BOM watcher will retry files until the database is connected.');
+  }
+  startBackgroundService('BOM folder watcher', startFolderWatcher);
+});
 
 app.use('/api/auth', authRoutes);
 app.use('/api/groups', groupRoutes);
@@ -295,6 +316,34 @@ app.get('/api/bom-watcher/status', (req, res) => {
   });
 });
 
+app.get('/api/runtime/status', (req, res) => {
+  res.json({
+    success: true,
+    server: {
+      uptimeSeconds: Math.round(process.uptime()),
+      nodeEnv: process.env.NODE_ENV || 'development',
+      timestamp: new Date().toISOString(),
+    },
+    services: {
+      ftp: {
+        enabled: true,
+        port: Number(process.env.FTP_PORT || 21),
+      },
+      bomWatcher: {
+        watchFolder: WATCH_FOLDER,
+        lastResult: getLatestProcessingResult(),
+      },
+    },
+  });
+});
+
+app.use('/api', (req, res) => {
+  res.status(404).json({
+    success: false,
+    message: `API route not found: ${req.method} ${req.originalUrl}`,
+  });
+});
+
 let frontendPath;
 if (process.env.FRONTEND_PATH) {
   frontendPath = process.env.FRONTEND_PATH;
@@ -309,7 +358,11 @@ console.log('Serving frontend from:', frontendPath);
 app.use(express.static(frontendPath));
 
 app.get('*', (req, res) => {
-  res.sendFile(path.join(frontendPath, 'index.html'));
+  const indexPath = path.join(frontendPath, 'index.html');
+  res.sendFile(indexPath, (error) => {
+    if (!error) return;
+    res.status(404).send('Frontend build not found. Run the frontend build and copy it into the backend public folder.');
+  });
 });
 
 app.use((err, req, res, next) => {
@@ -317,18 +370,34 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({
     success: false,
     message: err.message || 'Internal server error',
-  });``
+  });
 });
 const PORT = Number(process.env.PORT || 5001);
-const NETWORK_IP = (process.env.NETWORK_IP || '127.0.0.1').trim();
-const HOST = NETWORK_IP; // bind directly to this IP
+const HOST = (process.env.HOST || process.env.NETWORK_IP || '0.0.0.0').trim();
+const NETWORK_IP = (process.env.NETWORK_IP || '').trim();
 
-app.listen(PORT, HOST, () => {
-  const base = `http://${NETWORK_IP}:${PORT}`;
-  console.log(`Server running on ${base}`);
-  console.log(`Local:   http://localhost:${PORT}`);
-  console.log(`Network: ${base}`);
-});
+const startHttpServer = (host) => {
+  const server = app.listen(PORT, host, () => {
+    const networkHost = NETWORK_IP && NETWORK_IP !== '0.0.0.0' ? NETWORK_IP : '<machine-ip>';
+    console.log(`Server running on http://${host}:${PORT}`);
+    console.log(`Local:   http://localhost:${PORT}`);
+    console.log(`Network: http://${networkHost}:${PORT}`);
+  });
+
+  server.on('error', (error) => {
+    if (error.code === 'EADDRNOTAVAIL' && host !== '0.0.0.0') {
+      console.error(`[STARTUP] Cannot bind to ${host}:${PORT}. Falling back to 0.0.0.0.`);
+      startHttpServer('0.0.0.0');
+      return;
+    }
+
+    console.error(`[STARTUP] HTTP server failed on ${host}:${PORT}:`, error.message);
+  });
+
+  return server;
+};
+
+startHttpServer(HOST);
 // const PORT = process.env.PORT || 5001;
 // const HOST = process.env.HOST || '0.0.0.0';
 

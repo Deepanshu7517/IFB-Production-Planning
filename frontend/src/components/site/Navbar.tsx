@@ -16,7 +16,7 @@ const Navbar = () => {
     <div className="navbar bg-white shadow-sm px-4">
       <div className="navbar-start gap-2">
         <div className="flex-none" onClick={() => navigate("/production-planning")}>
-          <a className="text-3xl font-extrabold font-serif cursor-pointer">IFB</a>
+          <a className="text-3xl font-extrabold font-serif cursor-pointer"><img className="h-5" src="IFBlogo.png" alt="IFBdsz" /></a>
         </div>
         
         {/* Drawer Toggle Button */}

@@ -770,7 +770,13 @@ export const getDashboardData = async (req, res) => {
       });
       const entered = planEntries.filter((e) => e.actual !== null);
       const planActual = entered.reduce((s, e) => s + (e.actual ?? 0), 0);
-      const planPlanned = entered.reduce((s, e) => s + e.planned, 0);
+      // Sum ALL planned values for the week (not just entered days).
+      // The Overview Dashboard hierarchy cards show "total weekly commitment vs
+      // actual so far", so planPlanned must be the full-week figure.
+      // adherence = actual / fullWeekPlanned  →  intentionally conservative
+      //   (e.g. 16% when 1 of 6 days entered, 100% only when full week is met).
+      // This matches the rawPlannedTotal approach in production-calendar.tsx.
+      const planPlanned = planEntries.reduce((s, e) => s + (e.planned ?? 0), 0);
 
       // Day-level performance counts for this plan
       const aheadDays = entered.filter((e) => e.actual >= e.planned).length;
@@ -890,6 +896,7 @@ export const getDashboardData = async (req, res) => {
             partNumber: p.partNumber,
             partName: p.partName,
             capacity: p.capacity,
+            shift: p.shift ?? null,      // needed by frontend to compute weekly capacity display
             workingDays: p.workingDays,
             totalPlanned: p.totalPlanned,
             totalActual: p.totalActual,

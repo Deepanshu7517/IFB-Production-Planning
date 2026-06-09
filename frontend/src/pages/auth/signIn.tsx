@@ -97,7 +97,13 @@
 // src/pages/SignIn.tsx
 import { useState, type BaseSyntheticEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { API_BASE } from '../../config/api'; // <-- Import the centralized variable here
+import { API_BASE, getErrorMessage, readJsonResponse } from '../../config/api';
+
+type LoginResponse = {
+  success?: boolean;
+  message?: string;
+  user?: unknown;
+};
 
 const SignIn = () => {
   const [Form, setForm] = useState<{ email: string; password: string }>({
@@ -112,20 +118,19 @@ const SignIn = () => {
     setError(null);
     setLoading(true);
     try {
-      // API_BASE is automatically injected here and guaranteed to be correct
       const res = await fetch(`${API_BASE}/production-auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(Form),
       });
-      const data = await res.json();
+      const data = await readJsonResponse<LoginResponse>(res);
       if (!res.ok || !data.success) throw new Error(data.message || 'Invalid credentials');
 
       localStorage.setItem('production_user', JSON.stringify(data.user));
 
       navigate('/production-planning');
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Unable to sign in.'));
     } finally {
       setLoading(false);
     }
